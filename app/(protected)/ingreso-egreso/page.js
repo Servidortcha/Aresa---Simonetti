@@ -121,7 +121,7 @@ export default function IngresoEgresoPage() {
           <select className={inputCls} value={form.insumoId} onChange={(e) => setForm({ ...form, insumoId: e.target.value })} required>
             <option value="">— Seleccionar insumo —</option>
             {insumosVisibles.map((i) => (
-              <option key={i.id} value={i.id}>{i.nombre}{soloEgreso ? "" : ` (stock: ${i.stock} ${i.unidad})`}</option>
+              <option key={i.id} value={i.id}>{i.nombre}{rol === "taller_stock" ? "" : ` (stock: ${i.stock} ${i.unidad})`}</option>
             ))}
           </select>
         </Field>
