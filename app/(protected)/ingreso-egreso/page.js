@@ -38,6 +38,7 @@ export default function IngresoEgresoPage() {
       .order("fecha", { ascending: false })
       .limit(8);
     if (!esAdmin) query = query.eq("insumos.deposito", "Principal");
+    if (soloEgreso) query = query.eq("tipo", "salida");
     const { data } = await query;
     setHistorial(data || []);
     setHistorialLoading(false);
@@ -45,7 +46,7 @@ export default function IngresoEgresoPage() {
 
   useEffect(() => {
     cargarHistorial();
-  }, [esAdmin]);
+  }, [esAdmin, soloEgreso]);
 
   useEffect(() => {
     if (soloEgreso) setForm((f) => (f.tipo === "salida" ? f : { ...f, tipo: "salida" }));
