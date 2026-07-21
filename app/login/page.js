@@ -30,7 +30,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-paper flex items-center justify-center px-4 relative overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center px-4 relative overflow-hidden" style={{ backgroundColor: "rgba(22, 58, 95, 0.05)" }}>
       <AresaBackdrop />
       <div className="w-full max-w-sm relative">
         <div className="flex items-center justify-center mb-8">
