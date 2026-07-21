@@ -182,8 +182,14 @@ export default function IngresoEgresoPage() {
             </Field>
           )}
 
-          <Field label="Nota (opcional)">
-            <input className={inputCls} value={form.nota} onChange={(e) => setForm({ ...form, nota: e.target.value })} placeholder="Ej. Lote #114 / Compra mensual" />
+          <Field label={form.tipo === "salida" ? "Retirado por (nombre y apellido)" : "Nota (opcional)"}>
+            <input
+              className={inputCls}
+              value={form.nota}
+              onChange={(e) => setForm({ ...form, nota: e.target.value })}
+              placeholder={form.tipo === "salida" ? "Ej. Juan Pérez" : "Ej. Compra mensual"}
+              required={form.tipo === "salida"}
+            />
           </Field>
 
           <button type="submit" className="w-full mt-2 bg-ink text-paper py-2.5 rounded-sm text-sm font-medium hover:bg-[#333731]">
