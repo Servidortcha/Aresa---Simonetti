@@ -18,7 +18,7 @@ export default function MovimientosPage() {
     async function load() {
       const { data, error } = await supabase
         .from("movimientos")
-        .select("id, tipo, cantidad, nota, fecha, producto_texto, usuario_email, insumos(nombre, unidad)")
+        .select("id, tipo, cantidad, nota, fecha, producto_texto, usuario_email, stock_resultante, insumos(nombre, unidad)")
         .order("fecha", { ascending: false });
       if (error) setError(error.message);
       else setMovimientos(data);
@@ -38,6 +38,7 @@ export default function MovimientosPage() {
       Tipo: m.tipo === "entrada" ? "Entrada" : "Salida",
       Cantidad: m.cantidad,
       Unidad: m.insumos?.unidad,
+      "Stock resultante": m.stock_resultante ?? "",
       "Usado en": m.producto_texto || "",
       Nota: m.nota || "",
       Usuario: m.usuario_email || "",
@@ -65,20 +66,21 @@ export default function MovimientosPage() {
       {error && <p className="text-sm text-red mb-4">Error: {error}</p>}
 
       <div className="bg-white border border-line rounded-sm overflow-x-auto">
-        <table className="w-full text-sm min-w-[800px]">
+        <table className="w-full text-sm min-w-[900px]">
           <thead>
             <tr className="text-left text-xs uppercase text-[#6B6558] border-b border-line">
               <th className="px-4 py-3 font-medium">Fecha</th>
               <th className="px-4 py-3 font-medium">Insumo</th>
               <th className="px-4 py-3 font-medium">Tipo</th>
               <th className="px-4 py-3 font-medium">Cantidad</th>
+              <th className="px-4 py-3 font-medium">Stock resultante</th>
               <th className="px-4 py-3 font-medium">Usado en</th>
               <th className="px-4 py-3 font-medium">Nota</th>
               <th className="px-4 py-3 font-medium">Usuario</th>
             </tr>
           </thead>
           <tbody>
-            {loading && <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-[#8A8578]">Cargando...</td></tr>}
+            {loading && <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-[#8A8578]">Cargando...</td></tr>}
             {!loading && movimientos.map((m, idx) => (
               <tr key={m.id} className={idx !== movimientos.length - 1 ? "border-b border-[#EFEBE0]" : ""}>
                 <td className="px-4 py-3 text-[#6B6558] font-mono">{new Date(m.fecha).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}</td>
@@ -90,13 +92,14 @@ export default function MovimientosPage() {
                   </span>
                 </td>
                 <td className="px-4 py-3 font-mono">{m.cantidad} {m.insumos?.unidad}</td>
+                <td className="px-4 py-3 font-mono text-[#6B6558]">{m.stock_resultante ?? "—"} {m.stock_resultante != null ? m.insumos?.unidad : ""}</td>
                 <td className="px-4 py-3 text-[#4A463D]">{m.producto_texto || "—"}</td>
                 <td className="px-4 py-3 text-[#8A8578]">{m.nota || "—"}</td>
                 <td className="px-4 py-3 text-[#8A8578] text-xs">{m.usuario_email?.replace("@simonetti.local", "") || "—"}</td>
               </tr>
             ))}
             {!loading && movimientos.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-[#8A8578]">Aún no hay movimientos registrados</td></tr>
+              <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-[#8A8578]">Aún no hay movimientos registrados</td></tr>
             )}
           </tbody>
         </table>
