@@ -11,6 +11,7 @@ const TABS = [
   { href: "/movimientos", label: "Movimientos", short: "Historial" },
   { href: "/stock-panol", label: "Stock Pañol", short: "Pañol", adminOnly: true },
   { href: "/trabajos", label: "Trabajos", short: "Trabajos" },
+  { href: "/taller", label: "Taller", short: "Taller", adminOnly: true },
 ];
 
 export default function Nav({ userEmail, rol }) {
