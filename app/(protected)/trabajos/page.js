@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import * as XLSX from "xlsx";
 import { supabase } from "../../../lib/supabaseClient";
@@ -8,7 +8,7 @@ import { useAuth } from "../../../lib/AuthContext";
 import { Wrench, Download } from "lucide-react";
 
 const TIPOS = ["Corte Láser", "Tornería"];
-const emptyForm = { tipo: TIPOS[0], cliente: "", descripcion: "", cantidad: "", duracion_minutos: "", material: "" };
+const emptyForm = { tipo: TIPOS[0], cliente: "", descripcion: "", cantidad: "", duracion_minutos: "", material: "", largo_mm: "", ancho_mm: "" };
 
 const inputCls = "w-full px-3 py-2 bg-white border border-line rounded-sm text-sm text-ink focus:outline-none focus:ring-2 focus:ring-green focus:border-transparent";
 
@@ -21,6 +21,14 @@ function Field({ label, children }) {
   );
 }
 
+function calcularM2(largo, ancho, cantidad) {
+  const l = Number(largo);
+  const a = Number(ancho);
+  const c = Number(cantidad) || 1;
+  if (!l || !a) return null;
+  return (l * a * c) / 1_000_000; // mm² -> m², multiplicado por cantidad de piezas
+}
+
 export default function TrabajosPage() {
   const { rol, session } = useAuth();
   const router = useRouter();
@@ -31,6 +39,9 @@ export default function TrabajosPage() {
   const [error, setError] = useState(null);
   const [confirmacion, setConfirmacion] = useState(null);
   const [form, setForm] = useState(emptyForm);
+
+  const esLaser = form.tipo === "Corte Láser";
+  const m2Preview = useMemo(() => calcularM2(form.largo_mm, form.ancho_mm, form.cantidad), [form.largo_mm, form.ancho_mm, form.cantidad]);
 
   async function cargar() {
     setLoading(true);
@@ -51,6 +62,7 @@ export default function TrabajosPage() {
   async function submit(e) {
     e.preventDefault();
     setError(null);
+    const metros_cuadrados = form.tipo === "Corte Láser" ? calcularM2(form.largo_mm, form.ancho_mm, form.cantidad) : null;
     const { error } = await supabase.from("trabajos").insert({
       tipo: form.tipo,
       cliente: form.cliente || null,
@@ -58,6 +70,9 @@ export default function TrabajosPage() {
       cantidad: form.cantidad ? Number(form.cantidad) : null,
       duracion_minutos: form.duracion_minutos ? Number(form.duracion_minutos) : null,
       material: form.material || null,
+      largo_mm: form.tipo === "Corte Láser" && form.largo_mm ? Number(form.largo_mm) : null,
+      ancho_mm: form.tipo === "Corte Láser" && form.ancho_mm ? Number(form.ancho_mm) : null,
+      metros_cuadrados,
       usuario_email: session?.user?.email || null,
     });
     if (error) {
@@ -78,6 +93,9 @@ export default function TrabajosPage() {
       Descripción: t.descripcion || "",
       Cantidad: t.cantidad ?? "",
       "Duración (min)": t.duracion_minutos ?? "",
+      "Largo (mm)": t.largo_mm ?? "",
+      "Ancho (mm)": t.ancho_mm ?? "",
+      "m²": t.metros_cuadrados ?? "",
       Material: t.material || "",
       Usuario: t.usuario_email || "",
     }));
@@ -143,6 +161,25 @@ export default function TrabajosPage() {
             </Field>
           </div>
 
+          {esLaser && (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Field label="Largo (mm)">
+                  <input type="number" className={inputCls} value={form.largo_mm} onChange={(e) => setForm({ ...form, largo_mm: e.target.value })} />
+                </Field>
+                <Field label="Ancho (mm)">
+                  <input type="number" className={inputCls} value={form.ancho_mm} onChange={(e) => setForm({ ...form, ancho_mm: e.target.value })} />
+                </Field>
+              </div>
+              {m2Preview != null && (
+                <p className="text-xs text-[#6B6558] -mt-2 mb-3">
+                  Área total: <span className="font-medium text-ink">{m2Preview.toFixed(3)} m²</span>
+                  {Number(form.cantidad) > 1 ? ` (${form.cantidad} piezas)` : ""}
+                </p>
+              )}
+            </>
+          )}
+
           <Field label="Material usado">
             <input className={inputCls} value={form.material} onChange={(e) => setForm({ ...form, material: e.target.value })} placeholder="Ej. Chapa de acero 3mm" />
           </Field>
@@ -153,7 +190,7 @@ export default function TrabajosPage() {
         </form>
 
         <div className="bg-white border border-line rounded-sm overflow-x-auto w-full">
-          <table className="w-full text-sm min-w-[700px]">
+          <table className="w-full text-sm min-w-[780px]">
             <thead>
               <tr className="text-left text-xs uppercase text-[#6B6558] border-b border-line">
                 <th className="px-4 py-3 font-medium">Fecha</th>
@@ -162,11 +199,12 @@ export default function TrabajosPage() {
                 <th className="px-4 py-3 font-medium">Descripción</th>
                 <th className="px-4 py-3 font-medium">Cant.</th>
                 <th className="px-4 py-3 font-medium">Duración</th>
+                <th className="px-4 py-3 font-medium">m²</th>
                 <th className="px-4 py-3 font-medium">Material</th>
               </tr>
             </thead>
             <tbody>
-              {loading && <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-[#8A8578]">Cargando...</td></tr>}
+              {loading && <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-[#8A8578]">Cargando...</td></tr>}
               {!loading && trabajos.map((t, idx) => (
                 <tr key={t.id} className={idx !== trabajos.length - 1 ? "border-b border-[#EFEBE0]" : ""}>
                   <td className="px-4 py-3 text-[#6B6558] font-mono">{new Date(t.fecha).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}</td>
@@ -175,11 +213,12 @@ export default function TrabajosPage() {
                   <td className="px-4 py-3 text-[#4A463D]">{t.descripcion || "—"}</td>
                   <td className="px-4 py-3 font-mono">{t.cantidad ?? "—"}</td>
                   <td className="px-4 py-3 font-mono">{t.duracion_minutos != null ? `${t.duracion_minutos} min` : "—"}</td>
+                  <td className="px-4 py-3 font-mono">{t.metros_cuadrados != null ? `${Number(t.metros_cuadrados).toFixed(3)} m²` : "—"}</td>
                   <td className="px-4 py-3 text-[#8A8578]">{t.material || "—"}</td>
                 </tr>
               ))}
               {!loading && trabajos.length === 0 && (
-                <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-[#8A8578]">Aún no hay trabajos registrados</td></tr>
+                <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-[#8A8578]">Aún no hay trabajos registrados</td></tr>
               )}
             </tbody>
           </table>
