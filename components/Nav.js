@@ -10,19 +10,17 @@ const TABS = [
   { href: "/stock", label: "Stock", short: "Stock" },
   { href: "/movimientos", label: "Movimientos", short: "Historial" },
   { href: "/stock-panol", label: "Stock Pañol", short: "Pañol", adminOnly: true },
-  { href: "/stock-panol", label: "Stock Pañol", short: "Pañol", adminOnly: true },
   { href: "/trabajos", label: "Trabajos", short: "Trabajos" },
-];
 ];
 
 export default function Nav({ userEmail, rol }) {
   const pathname = usePathname();
   const router = useRouter();
   const tabs =
-  ? TABS.filter((t) => t.href === "/ingreso-egreso" || t.href === "/stock" || t.href === "/trabajos")
+    rol === "admin"
       ? TABS
       : rol === "taller_stock"
-      ? TABS.filter((t) => t.href === "/ingreso-egreso" || t.href === "/stock")
+      ? TABS.filter((t) => t.href === "/ingreso-egreso" || t.href === "/stock" || t.href === "/trabajos")
       : TABS.filter((t) => t.href === "/ingreso-egreso");
 
   async function handleLogout() {
