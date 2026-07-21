@@ -39,9 +39,14 @@ export default function TrabajosPage() {
   const [error, setError] = useState(null);
   const [confirmacion, setConfirmacion] = useState(null);
   const [form, setForm] = useState(emptyForm);
+  const [filtroTipo, setFiltroTipo] = useState("Todos");
 
   const esLaser = form.tipo === "Corte Láser";
   const m2Preview = useMemo(() => calcularM2(form.largo_mm, form.ancho_mm, form.cantidad), [form.largo_mm, form.ancho_mm, form.cantidad]);
+  const trabajosFiltrados = useMemo(
+    () => (filtroTipo === "Todos" ? trabajos : trabajos.filter((t) => t.tipo === filtroTipo)),
+    [trabajos, filtroTipo]
+  );
 
   async function cargar() {
     setLoading(true);
@@ -86,7 +91,7 @@ export default function TrabajosPage() {
   }
 
   function exportarExcel() {
-    const filas = trabajos.map((t) => ({
+    const filas = trabajosFiltrados.map((t) => ({
       Fecha: new Date(t.fecha).toLocaleString("es-MX"),
       Tipo: t.tipo,
       Cliente: t.cliente || "",
@@ -122,62 +127,62 @@ export default function TrabajosPage() {
       {error && <p className="text-sm text-red mb-4">Error: {error}</p>}
       {confirmacion && <p className="text-sm text-green mb-4">{confirmacion}</p>}
 
-      <div className="flex flex-col lg:flex-row gap-6 items-start">
-        <form onSubmit={submit} className="bg-white border border-line rounded-sm p-4 sm:p-6 w-full max-w-lg">
-          <Field label="Tipo de trabajo">
-            <div className="flex gap-2">
-              {TIPOS.map((t) => (
-                <button
-                  type="button"
-                  key={t}
-                  onClick={() => setForm({ ...form, tipo: t })}
-                  className="flex-1 py-2 rounded-sm text-sm font-medium border transition-colors"
-                  style={{
-                    backgroundColor: form.tipo === t ? "#4A4B4D" : "white",
-                    color: form.tipo === t ? "white" : "#1C1F1C",
-                    borderColor: form.tipo === t ? "transparent" : "#D8D2C4",
-                  }}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-          </Field>
-
-          <Field label="Cliente">
-            <input className={inputCls} value={form.cliente} onChange={(e) => setForm({ ...form, cliente: e.target.value })} placeholder="Ej. Simonetti Montajes" />
-          </Field>
+      <div className="flex flex-col gap-6">
+        <form onSubmit={submit} className="bg-white border border-line rounded-sm p-4 sm:p-6 w-full max-w-2xl">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
+            <Field label="Tipo de trabajo">
+              <div className="flex gap-2">
+                {TIPOS.map((t) => (
+                  <button
+                    type="button"
+                    key={t}
+                    onClick={() => setForm({ ...form, tipo: t })}
+                    className="flex-1 py-2 rounded-sm text-sm font-medium border transition-colors"
+                    style={{
+                      backgroundColor: form.tipo === t ? "#4A4B4D" : "white",
+                      color: form.tipo === t ? "white" : "#1C1F1C",
+                      borderColor: form.tipo === t ? "transparent" : "#D8D2C4",
+                    }}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </Field>
+            <Field label="Cliente">
+              <input className={inputCls} value={form.cliente} onChange={(e) => setForm({ ...form, cliente: e.target.value })} placeholder="Ej. Simonetti Montajes" />
+            </Field>
+          </div>
 
           <Field label="Descripción">
             <input className={inputCls} value={form.descripcion} onChange={(e) => setForm({ ...form, descripcion: e.target.value })} placeholder="Ej. Corte de placas 3mm" />
           </Field>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <Field label="Cantidad">
               <input type="number" className={inputCls} value={form.cantidad} onChange={(e) => setForm({ ...form, cantidad: e.target.value })} />
             </Field>
-            <Field label="Duración (minutos)">
+            <Field label="Duración (min)">
               <input type="number" className={inputCls} value={form.duracion_minutos} onChange={(e) => setForm({ ...form, duracion_minutos: e.target.value })} />
             </Field>
-          </div>
-
-          {esLaser && (
-            <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {esLaser && (
+              <>
                 <Field label="Largo (mm)">
                   <input type="number" className={inputCls} value={form.largo_mm} onChange={(e) => setForm({ ...form, largo_mm: e.target.value })} />
                 </Field>
                 <Field label="Ancho (mm)">
                   <input type="number" className={inputCls} value={form.ancho_mm} onChange={(e) => setForm({ ...form, ancho_mm: e.target.value })} />
                 </Field>
-              </div>
-              {m2Preview != null && (
-                <p className="text-xs text-[#6B6558] -mt-2 mb-3">
-                  Área total: <span className="font-medium text-ink">{m2Preview.toFixed(3)} m²</span>
-                  {Number(form.cantidad) > 1 ? ` (${form.cantidad} piezas)` : ""}
-                </p>
-              )}
-            </>
+              </>
+            )}
+          </div>
+
+          {esLaser && m2Preview != null && (
+            <div className="flex items-center gap-2 bg-[#F2EEE3] border border-line rounded-sm px-3 py-2 mb-3 -mt-1">
+              <span className="text-xs text-[#6B6558]">Área total:</span>
+              <span className="text-sm font-semibold text-ink font-mono">{m2Preview.toFixed(3)} m²</span>
+              {Number(form.cantidad) > 1 && <span className="text-xs text-[#8A8578]">({form.cantidad} piezas)</span>}
+            </div>
           )}
 
           <Field label="Material usado">
@@ -189,39 +194,71 @@ export default function TrabajosPage() {
           </button>
         </form>
 
-        <div className="bg-white border border-line rounded-sm overflow-x-auto w-full">
-          <table className="w-full text-sm min-w-[780px]">
-            <thead>
-              <tr className="text-left text-xs uppercase text-[#6B6558] border-b border-line">
-                <th className="px-4 py-3 font-medium">Fecha</th>
-                <th className="px-4 py-3 font-medium">Tipo</th>
-                <th className="px-4 py-3 font-medium">Cliente</th>
-                <th className="px-4 py-3 font-medium">Descripción</th>
-                <th className="px-4 py-3 font-medium">Cant.</th>
-                <th className="px-4 py-3 font-medium">Duración</th>
-                <th className="px-4 py-3 font-medium">m²</th>
-                <th className="px-4 py-3 font-medium">Material</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading && <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-[#8A8578]">Cargando...</td></tr>}
-              {!loading && trabajos.map((t, idx) => (
-                <tr key={t.id} className={idx !== trabajos.length - 1 ? "border-b border-[#EFEBE0]" : ""}>
-                  <td className="px-4 py-3 text-[#6B6558] font-mono">{new Date(t.fecha).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}</td>
-                  <td className="px-4 py-3 font-medium">{t.tipo}</td>
-                  <td className="px-4 py-3 text-[#4A463D]">{t.cliente || "—"}</td>
-                  <td className="px-4 py-3 text-[#4A463D]">{t.descripcion || "—"}</td>
-                  <td className="px-4 py-3 font-mono">{t.cantidad ?? "—"}</td>
-                  <td className="px-4 py-3 font-mono">{t.duracion_minutos != null ? `${t.duracion_minutos} min` : "—"}</td>
-                  <td className="px-4 py-3 font-mono">{t.metros_cuadrados != null ? `${Number(t.metros_cuadrados).toFixed(3)} m²` : "—"}</td>
-                  <td className="px-4 py-3 text-[#8A8578]">{t.material || "—"}</td>
-                </tr>
+        <div className="w-full">
+          <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
+            <h2 className="font-display text-xl font-semibold text-ink">Historial de trabajos</h2>
+            <div className="flex gap-1">
+              {["Todos", ...TIPOS].map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setFiltroTipo(t)}
+                  className="px-3 py-1.5 rounded-sm text-xs font-medium border transition-colors"
+                  style={{
+                    backgroundColor: filtroTipo === t ? "#4A4B4D" : "white",
+                    color: filtroTipo === t ? "white" : "#4A463D",
+                    borderColor: filtroTipo === t ? "transparent" : "#D8D2C4",
+                  }}
+                >
+                  {t}
+                </button>
               ))}
-              {!loading && trabajos.length === 0 && (
-                <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-[#8A8578]">Aún no hay trabajos registrados</td></tr>
-              )}
-            </tbody>
-          </table>
+            </div>
+          </div>
+
+          <div className="bg-white border border-line rounded-sm overflow-x-auto w-full">
+            <table className="w-full text-sm min-w-[800px]">
+              <thead>
+                <tr className="text-left text-xs uppercase text-[#6B6558] border-b border-line">
+                  <th className="px-4 py-3 font-medium">Fecha</th>
+                  <th className="px-4 py-3 font-medium">Tipo</th>
+                  <th className="px-4 py-3 font-medium">Cliente</th>
+                  <th className="px-4 py-3 font-medium">Descripción</th>
+                  <th className="px-4 py-3 font-medium">Cant.</th>
+                  <th className="px-4 py-3 font-medium">Duración</th>
+                  <th className="px-4 py-3 font-medium">m²</th>
+                  <th className="px-4 py-3 font-medium">Material</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading && <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-[#8A8578]">Cargando...</td></tr>}
+                {!loading && trabajosFiltrados.map((t, idx) => (
+                  <tr key={t.id} className={idx !== trabajosFiltrados.length - 1 ? "border-b border-[#EFEBE0]" : ""}>
+                    <td className="px-4 py-3 text-[#6B6558] font-mono whitespace-nowrap">{new Date(t.fecha).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}</td>
+                    <td className="px-4 py-3">
+                      <span
+                        className="inline-block text-xs font-medium px-2 py-0.5 rounded-sm whitespace-nowrap"
+                        style={{
+                          backgroundColor: t.tipo === "Corte Láser" ? "#EAF0F5" : "#FBEFE6",
+                          color: t.tipo === "Corte Láser" ? "#2E6F9E" : "#B25A1E",
+                        }}
+                      >
+                        {t.tipo}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-[#4A463D] whitespace-nowrap">{t.cliente || "—"}</td>
+                    <td className="px-4 py-3 text-[#4A463D]">{t.descripcion || "—"}</td>
+                    <td className="px-4 py-3 font-mono">{t.cantidad ?? "—"}</td>
+                    <td className="px-4 py-3 font-mono whitespace-nowrap">{t.duracion_minutos != null ? `${t.duracion_minutos} min` : "—"}</td>
+                    <td className="px-4 py-3 font-mono whitespace-nowrap">{t.metros_cuadrados != null ? `${Number(t.metros_cuadrados).toFixed(3)} m²` : "—"}</td>
+                    <td className="px-4 py-3 text-[#8A8578]">{t.material || "—"}</td>
+                  </tr>
+                ))}
+                {!loading && trabajosFiltrados.length === 0 && (
+                  <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-[#8A8578]">Sin trabajos {filtroTipo !== "Todos" ? `de ${filtroTipo}` : "registrados"}</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </>
