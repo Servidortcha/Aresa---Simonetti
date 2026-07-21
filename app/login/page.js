@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabaseClient";
 import { LogIn } from "lucide-react";
 import Footer from "../../components/Footer";
+import AresaBackdrop from "../../components/AresaBackdrop";
 
 const inputCls = "w-full px-3 py-2 bg-white border border-line rounded-sm text-sm text-ink focus:outline-none focus:ring-2 focus:ring-green focus:border-transparent";
 
@@ -30,13 +31,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-paper flex items-center justify-center px-4 relative overflow-hidden">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src="/icono.png"
-        alt=""
-        className="absolute pointer-events-none select-none"
-        style={{ width: "480px", height: "480px", right: "-100px", bottom: "-100px", opacity: 0.08 }}
-      />
+      <AresaBackdrop />
       <div className="w-full max-w-sm relative">
         <div className="flex items-center justify-center mb-8">
           {/* eslint-disable-next-line @next/next/no-img-element */}
