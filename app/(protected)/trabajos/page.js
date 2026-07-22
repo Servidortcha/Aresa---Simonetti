@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import * as XLSX from "xlsx";
 import { supabase } from "../../../lib/supabaseClient";
 import { useAuth } from "../../../lib/AuthContext";
-import { Wrench, Download } from "lucide-react";
+import { Wrench, Download, Printer } from "lucide-react";
 
 const TIPOS = ["Corte Láser", "Tornería"];
 const emptyForm = { tipo: TIPOS[0], cliente: "", descripcion: "", cantidad: "", duracion_minutos: "", duracion_horas: "", material: "", largo_mm: "", ancho_mm: "" };
@@ -40,6 +40,12 @@ export default function TrabajosPage() {
   const [confirmacion, setConfirmacion] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [filtroTipo, setFiltroTipo] = useState("Todos");
+  const [tarjeta, setTarjeta] = useState(null);
+
+  function imprimirTarjeta(t) {
+    setTarjeta(t);
+    setTimeout(() => window.print(), 100);
+  }
 
   const esLaser = form.tipo === "Corte Láser";
   const m2Preview = useMemo(() => calcularM2(form.largo_mm, form.ancho_mm, form.cantidad), [form.largo_mm, form.ancho_mm, form.cantidad]);
@@ -224,7 +230,7 @@ export default function TrabajosPage() {
           </div>
 
           <div className="bg-white border border-line rounded-sm overflow-x-auto w-full">
-            <table className="w-full text-sm min-w-[800px]">
+            <table className="w-full text-sm min-w-[860px]">
               <thead>
                 <tr className="text-left text-xs uppercase text-[#6B6558] border-b border-line">
                   <th className="px-4 py-3 font-medium">Fecha</th>
@@ -235,10 +241,11 @@ export default function TrabajosPage() {
                   <th className="px-4 py-3 font-medium">Duración</th>
                   <th className="px-4 py-3 font-medium">m²</th>
                   <th className="px-4 py-3 font-medium">Material</th>
+                  <th className="px-4 py-3 font-medium text-right">PDF</th>
                 </tr>
               </thead>
               <tbody>
-                {loading && <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-[#8A8578]">Cargando...</td></tr>}
+                {loading && <tr><td colSpan={9} className="px-4 py-8 text-center text-sm text-[#8A8578]">Cargando...</td></tr>}
                 {!loading && trabajosFiltrados.map((t, idx) => (
                   <tr key={t.id} className={idx !== trabajosFiltrados.length - 1 ? "border-b border-[#EFEBE0]" : ""}>
                     <td className="px-4 py-3 text-[#6B6558] font-mono whitespace-nowrap">{new Date(t.fecha).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}</td>
@@ -263,16 +270,56 @@ export default function TrabajosPage() {
                     </td>
                     <td className="px-4 py-3 font-mono whitespace-nowrap">{t.metros_cuadrados != null ? `${Number(t.metros_cuadrados).toFixed(3)} m²` : "—"}</td>
                     <td className="px-4 py-3 text-[#8A8578]">{t.material || "—"}</td>
+                    <td className="px-4 py-3 text-right">
+                      <button onClick={() => imprimirTarjeta(t)} className="text-[#4A4B4D] hover:opacity-70" title="Descargar tarjeta PDF">
+                        <Printer size={16} />
+                      </button>
+                    </td>
                   </tr>
                 ))}
                 {!loading && trabajosFiltrados.length === 0 && (
-                  <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-[#8A8578]">Sin trabajos {filtroTipo !== "Todos" ? `de ${filtroTipo}` : "registrados"}</td></tr>
+                  <tr><td colSpan={9} className="px-4 py-8 text-center text-sm text-[#8A8578]">Sin trabajos {filtroTipo !== "Todos" ? `de ${filtroTipo}` : "registrados"}</td></tr>
                 )}
               </tbody>
             </table>
           </div>
         </div>
       </div>
+
+      {tarjeta && (
+        <div className="print-card hidden">
+          <div className="pc-header">
+            <div className="pc-empresa">Simonetti Montajes Industriales</div>
+            <div className="pc-tipo">{tarjeta.tipo}</div>
+          </div>
+          <table className="pc-tabla">
+            <tbody>
+              <tr><td className="pc-label">Fecha</td><td>{new Date(tarjeta.fecha).toLocaleString("es-MX", { dateStyle: "long", timeStyle: "short" })}</td></tr>
+              <tr><td className="pc-label">Cliente</td><td>{tarjeta.cliente || "—"}</td></tr>
+              <tr><td className="pc-label">Descripción</td><td>{tarjeta.descripcion || "—"}</td></tr>
+              <tr><td className="pc-label">Cantidad</td><td>{tarjeta.cantidad ?? "—"}</td></tr>
+              <tr>
+                <td className="pc-label">Duración</td>
+                <td>
+                  {tarjeta.tipo === "Corte Láser"
+                    ? (tarjeta.duracion_minutos != null ? `${tarjeta.duracion_minutos} min` : "—")
+                    : (tarjeta.duracion_horas != null ? `${tarjeta.duracion_horas} h` : "—")}
+                </td>
+              </tr>
+              {tarjeta.tipo === "Corte Láser" && (
+                <>
+                  <tr><td className="pc-label">Largo</td><td>{tarjeta.largo_mm != null ? `${tarjeta.largo_mm} mm` : "—"}</td></tr>
+                  <tr><td className="pc-label">Ancho</td><td>{tarjeta.ancho_mm != null ? `${tarjeta.ancho_mm} mm` : "—"}</td></tr>
+                  <tr><td className="pc-label">Área total</td><td>{tarjeta.metros_cuadrados != null ? `${Number(tarjeta.metros_cuadrados).toFixed(3)} m²` : "—"}</td></tr>
+                </>
+              )}
+              <tr><td className="pc-label">Material</td><td>{tarjeta.material || "—"}</td></tr>
+              <tr><td className="pc-label">Registrado por</td><td>{tarjeta.usuario_email || "—"}</td></tr>
+            </tbody>
+          </table>
+          <div className="pc-footer">Powered by Aresa</div>
+        </div>
+      )}
     </>
   );
 }
