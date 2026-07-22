@@ -48,6 +48,7 @@ export default function StockPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm);
+  const [enviando, setEnviando] = useState(false);
   const [archiving, setArchiving] = useState(null);
   const [verArchivados, setVerArchivados] = useState(false);
 
@@ -108,8 +109,21 @@ export default function StockPage() {
 
   async function submitForm(e) {
     e.preventDefault();
+    if (enviando) return;
+    setError(null);
+
+    if (!form.nombre.trim()) {
+      setError("El nombre del insumo es obligatorio.");
+      return;
+    }
+    if (!form.categoria) {
+      setError("Elegí una categoría.");
+      return;
+    }
+
+    setEnviando(true);
     const payload = {
-      nombre: form.nombre,
+      nombre: form.nombre.trim(),
       categoria: form.categoria,
       unidad: form.unidad,
       stock: Number(form.stock) || 0,
@@ -118,6 +132,7 @@ export default function StockPage() {
     const { error } = editingId
       ? await supabase.from("insumos").update(payload).eq("id", editingId)
       : await supabase.from("insumos").insert(payload);
+    setEnviando(false);
     if (error) {
       setError(error.message);
       return;
@@ -270,8 +285,8 @@ export default function StockPage() {
                   <input type="number" className={inputCls} value={form.minimo} onChange={(e) => setForm({ ...form, minimo: e.target.value })} />
                 </Field>
               </div>
-              <button type="submit" className="w-full mt-2 bg-ink text-paper py-2.5 rounded-sm text-sm font-medium hover:bg-[#333731]">
-                {editingId ? "Guardar cambios" : "Guardar insumo"}
+              <button type="submit" disabled={enviando} className="w-full mt-2 bg-ink text-paper py-2.5 rounded-sm text-sm font-medium hover:bg-[#333731] disabled:opacity-60">
+                {enviando ? "Guardando..." : editingId ? "Guardar cambios" : "Guardar insumo"}
               </button>
             </form>
           </div>
