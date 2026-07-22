@@ -7,7 +7,7 @@ import { supabase } from "../../../lib/supabaseClient";
 import { useAuth } from "../../../lib/AuthContext";
 import { Hammer, Download } from "lucide-react";
 
-const emptyForm = { cliente: "", cantidad: "", duracion_minutos: "", cantidad_personas: "", descripcion_materiales: "" };
+const emptyForm = { cliente: "", cantidad: "", duracion_horas: "", cantidad_personas: "", descripcion_materiales: "" };
 
 const inputCls = "w-full px-3 py-2 bg-white border border-line rounded-sm text-sm text-ink focus:outline-none focus:ring-2 focus:ring-green focus:border-transparent";
 const textareaCls = inputCls + " resize-y min-h-[110px]";
@@ -54,7 +54,7 @@ export default function TallerPage() {
     const { error } = await supabase.from("taller_trabajos").insert({
       cliente: form.cliente || null,
       cantidad: form.cantidad ? Number(form.cantidad) : null,
-      duracion_minutos: form.duracion_minutos ? Number(form.duracion_minutos) : null,
+      duracion_horas: form.duracion_horas ? Number(form.duracion_horas) : null,
       cantidad_personas: form.cantidad_personas ? Number(form.cantidad_personas) : null,
       descripcion_materiales: form.descripcion_materiales || null,
       usuario_email: session?.user?.email || null,
@@ -74,7 +74,7 @@ export default function TallerPage() {
       Fecha: new Date(r.fecha).toLocaleString("es-MX"),
       Cliente: r.cliente || "",
       Cantidad: r.cantidad ?? "",
-      "Duración (min)": r.duracion_minutos ?? "",
+      "Duración (horas)": r.duracion_horas ?? "",
       Personas: r.cantidad_personas ?? "",
       "Materiales usados": r.descripcion_materiales || "",
       Usuario: r.usuario_email || "",
@@ -117,8 +117,8 @@ export default function TallerPage() {
             <Field label="Cantidad">
               <input type="number" className={inputCls} value={form.cantidad} onChange={(e) => setForm({ ...form, cantidad: e.target.value })} />
             </Field>
-            <Field label="Duración (min)">
-              <input type="number" className={inputCls} value={form.duracion_minutos} onChange={(e) => setForm({ ...form, duracion_minutos: e.target.value })} />
+            <Field label="Duración (horas)">
+              <input type="number" className={inputCls} value={form.duracion_horas} onChange={(e) => setForm({ ...form, duracion_horas: e.target.value })} />
             </Field>
           </div>
 
@@ -157,7 +157,7 @@ export default function TallerPage() {
                     <td className="px-4 py-3 text-[#6B6558] font-mono whitespace-nowrap">{new Date(r.fecha).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}</td>
                     <td className="px-4 py-3 text-[#4A463D] whitespace-nowrap">{r.cliente || "—"}</td>
                     <td className="px-4 py-3 font-mono">{r.cantidad ?? "—"}</td>
-                    <td className="px-4 py-3 font-mono whitespace-nowrap">{r.duracion_minutos != null ? `${r.duracion_minutos} min` : "—"}</td>
+                    <td className="px-4 py-3 font-mono whitespace-nowrap">{r.duracion_horas != null ? `${r.duracion_horas} h` : "—"}</td>
                     <td className="px-4 py-3 font-mono">{r.cantidad_personas ?? "—"}</td>
                     <td className="px-4 py-3 text-[#4A463D] max-w-xs">
                       {r.descripcion_materiales ? (
