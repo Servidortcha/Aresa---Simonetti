@@ -8,7 +8,7 @@ import { useAuth } from "../../../lib/AuthContext";
 import { Wrench, Download } from "lucide-react";
 
 const TIPOS = ["Corte Láser", "Tornería"];
-const emptyForm = { tipo: TIPOS[0], cliente: "", descripcion: "", cantidad: "", duracion_minutos: "", material: "", largo_mm: "", ancho_mm: "" };
+const emptyForm = { tipo: TIPOS[0], cliente: "", descripcion: "", cantidad: "", duracion_minutos: "", duracion_horas: "", material: "", largo_mm: "", ancho_mm: "" };
 
 const inputCls = "w-full px-3 py-2 bg-white border border-line rounded-sm text-sm text-ink focus:outline-none focus:ring-2 focus:ring-green focus:border-transparent";
 
@@ -73,7 +73,8 @@ export default function TrabajosPage() {
       cliente: form.cliente || null,
       descripcion: form.descripcion || null,
       cantidad: form.cantidad ? Number(form.cantidad) : null,
-      duracion_minutos: form.duracion_minutos ? Number(form.duracion_minutos) : null,
+      duracion_minutos: esLaser && form.duracion_minutos ? Number(form.duracion_minutos) : null,
+      duracion_horas: !esLaser && form.duracion_horas ? Number(form.duracion_horas) : null,
       material: form.material || null,
       largo_mm: form.tipo === "Corte Láser" && form.largo_mm ? Number(form.largo_mm) : null,
       ancho_mm: form.tipo === "Corte Láser" && form.ancho_mm ? Number(form.ancho_mm) : null,
@@ -98,6 +99,7 @@ export default function TrabajosPage() {
       Descripción: t.descripcion || "",
       Cantidad: t.cantidad ?? "",
       "Duración (min)": t.duracion_minutos ?? "",
+      "Duración (horas)": t.duracion_horas ?? "",
       "Largo (mm)": t.largo_mm ?? "",
       "Ancho (mm)": t.ancho_mm ?? "",
       "m²": t.metros_cuadrados ?? "",
@@ -162,9 +164,15 @@ export default function TrabajosPage() {
             <Field label="Cantidad">
               <input type="number" className={inputCls} value={form.cantidad} onChange={(e) => setForm({ ...form, cantidad: e.target.value })} />
             </Field>
-            <Field label="Duración (min)">
-              <input type="number" className={inputCls} value={form.duracion_minutos} onChange={(e) => setForm({ ...form, duracion_minutos: e.target.value })} />
-            </Field>
+            {esLaser ? (
+              <Field label="Duración (min)">
+                <input type="number" className={inputCls} value={form.duracion_minutos} onChange={(e) => setForm({ ...form, duracion_minutos: e.target.value })} />
+              </Field>
+            ) : (
+              <Field label="Duración (horas)">
+                <input type="number" step="0.5" className={inputCls} value={form.duracion_horas} onChange={(e) => setForm({ ...form, duracion_horas: e.target.value })} />
+              </Field>
+            )}
             {esLaser && (
               <>
                 <Field label="Largo (mm)">
@@ -248,7 +256,11 @@ export default function TrabajosPage() {
                     <td className="px-4 py-3 text-[#4A463D] whitespace-nowrap">{t.cliente || "—"}</td>
                     <td className="px-4 py-3 text-[#4A463D]">{t.descripcion || "—"}</td>
                     <td className="px-4 py-3 font-mono">{t.cantidad ?? "—"}</td>
-                    <td className="px-4 py-3 font-mono whitespace-nowrap">{t.duracion_minutos != null ? `${t.duracion_minutos} min` : "—"}</td>
+                    <td className="px-4 py-3 font-mono whitespace-nowrap">
+                      {t.tipo === "Corte Láser"
+                        ? (t.duracion_minutos != null ? `${t.duracion_minutos} min` : "—")
+                        : (t.duracion_horas != null ? `${t.duracion_horas} h` : "—")}
+                    </td>
                     <td className="px-4 py-3 font-mono whitespace-nowrap">{t.metros_cuadrados != null ? `${Number(t.metros_cuadrados).toFixed(3)} m²` : "—"}</td>
                     <td className="px-4 py-3 text-[#8A8578]">{t.material || "—"}</td>
                   </tr>
