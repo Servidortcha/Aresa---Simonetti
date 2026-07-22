@@ -54,7 +54,7 @@ export default function ProtectedLayout({ children }) {
   return (
     <AuthContext.Provider value={{ session, rol }}>
       <Nav userEmail={session.user?.email} rol={rol} />
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">{children}</div>
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 sm:py-8">{children}</div>
       <Footer />
     </AuthContext.Provider>
   );
