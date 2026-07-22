@@ -221,7 +221,7 @@ export default function StockPage() {
           <tbody>
             {loading && <tr><td colSpan={soloLectura ? 4 : 5} className="px-4 py-8 text-center text-sm text-[#8A8578]">Cargando...</td></tr>}
             {!loading && filtered.map((i, idx) => (
-              <tr key={i.id} className={idx !== filtered.length - 1 ? "border-b border-[#EFEBE0]" : ""}>
+              <tr key={i.id} className={`${idx % 2 === 1 ? "bg-[#F7F4EC]" : ""} ${idx !== filtered.length - 1 ? "border-b border-[#EFEBE0]" : ""}`}>
                 <td className="px-4 py-3">
                   <div className="font-medium">{i.nombre}</div>
                 </td>
