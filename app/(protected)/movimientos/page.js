@@ -82,7 +82,7 @@ export default function MovimientosPage() {
           <tbody>
             {loading && <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-[#8A8578]">Cargando...</td></tr>}
             {!loading && movimientos.map((m, idx) => (
-              <tr key={m.id} className={idx !== movimientos.length - 1 ? "border-b border-[#EFEBE0]" : ""}>
+              <tr key={m.id} className={`${idx % 2 === 1 ? "bg-[#F7F4EC]" : ""} ${idx !== movimientos.length - 1 ? "border-b border-[#EFEBE0]" : ""}`}>
                 <td className="px-4 py-3 text-[#6B6558] font-mono">{new Date(m.fecha).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}</td>
                 <td className="px-4 py-3 font-medium">{m.insumos?.nombre}</td>
                 <td className="px-4 py-3">
