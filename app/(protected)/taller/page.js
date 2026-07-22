@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import * as XLSX from "xlsx";
 import { supabase } from "../../../lib/supabaseClient";
 import { useAuth } from "../../../lib/AuthContext";
-import { Hammer, Download } from "lucide-react";
+import { Hammer, Download, Paperclip, X, FileText } from "lucide-react";
 
 const emptyForm = { cliente: "", cantidad: "", duracion_horas: "", cantidad_personas: "", descripcion_materiales: "" };
 
@@ -30,6 +30,8 @@ export default function TallerPage() {
   const [error, setError] = useState(null);
   const [confirmacion, setConfirmacion] = useState(null);
   const [form, setForm] = useState(emptyForm);
+  const [archivosSeleccionados, setArchivosSeleccionados] = useState([]);
+  const [subiendo, setSubiendo] = useState(false);
   const [verDetalle, setVerDetalle] = useState(null);
 
   async function cargar() {
@@ -48,22 +50,52 @@ export default function TallerPage() {
     if (rol && rol !== "admin") router.replace("/ingreso-egreso");
   }, [rol, router]);
 
+  function agregarArchivos(e) {
+    const nuevos = Array.from(e.target.files || []);
+    setArchivosSeleccionados((prev) => [...prev, ...nuevos]);
+    e.target.value = "";
+  }
+
+  function quitarArchivo(idx) {
+    setArchivosSeleccionados((prev) => prev.filter((_, i) => i !== idx));
+  }
+
   async function submit(e) {
     e.preventDefault();
     setError(null);
+    setSubiendo(true);
+
+    // 1. Subir cada archivo seleccionado a Supabase Storage
+    const archivosSubidos = [];
+    for (const file of archivosSeleccionados) {
+      const path = `${Date.now()}-${file.name}`;
+      const { error: uploadError } = await supabase.storage.from("taller-archivos").upload(path, file);
+      if (uploadError) {
+        setError(`Error al subir ${file.name}: ${uploadError.message}`);
+        setSubiendo(false);
+        return;
+      }
+      const { data: pub } = supabase.storage.from("taller-archivos").getPublicUrl(path);
+      archivosSubidos.push({ name: file.name, url: pub.publicUrl });
+    }
+
+    // 2. Registrar el trabajo con los archivos ya subidos
     const { error } = await supabase.from("taller_trabajos").insert({
       cliente: form.cliente || null,
       cantidad: form.cantidad ? Number(form.cantidad) : null,
       duracion_horas: form.duracion_horas ? Number(form.duracion_horas) : null,
       cantidad_personas: form.cantidad_personas ? Number(form.cantidad_personas) : null,
       descripcion_materiales: form.descripcion_materiales || null,
+      archivos: archivosSubidos.length > 0 ? archivosSubidos : null,
       usuario_email: session?.user?.email || null,
     });
+    setSubiendo(false);
     if (error) {
       setError(error.message);
       return;
     }
     setForm(emptyForm);
+    setArchivosSeleccionados([]);
     setConfirmacion("Registro guardado");
     setTimeout(() => setConfirmacion(null), 3000);
     cargar();
@@ -77,6 +109,7 @@ export default function TallerPage() {
       "Duración (horas)": r.duracion_horas ?? "",
       Personas: r.cantidad_personas ?? "",
       "Materiales usados": r.descripcion_materiales || "",
+      Archivos: (r.archivos || []).map((a) => a.name).join(", "),
       Usuario: r.usuario_email || "",
     }));
     const hoja = XLSX.utils.json_to_sheet(filas);
@@ -118,7 +151,7 @@ export default function TallerPage() {
               <input type="number" className={inputCls} value={form.cantidad} onChange={(e) => setForm({ ...form, cantidad: e.target.value })} />
             </Field>
             <Field label="Duración (horas)">
-              <input type="number" className={inputCls} value={form.duracion_horas} onChange={(e) => setForm({ ...form, duracion_horas: e.target.value })} />
+              <input type="number" step="0.5" className={inputCls} value={form.duracion_horas} onChange={(e) => setForm({ ...form, duracion_horas: e.target.value })} />
             </Field>
           </div>
 
@@ -131,15 +164,35 @@ export default function TallerPage() {
             />
           </Field>
 
-          <button type="submit" className="w-full mt-2 bg-ink text-paper py-2.5 rounded-sm text-sm font-medium hover:bg-[#333731]">
-            Registrar
+          <Field label="Archivos adjuntos (podés agregar más de uno)">
+            <label className="flex items-center gap-2 border border-dashed border-line rounded-sm px-3 py-2.5 text-sm text-[#6B6558] cursor-pointer hover:bg-[#F2EEE3] transition-colors">
+              <Paperclip size={15} />
+              Elegir archivos
+              <input type="file" multiple className="hidden" onChange={agregarArchivos} />
+            </label>
+            {archivosSeleccionados.length > 0 && (
+              <ul className="mt-2 space-y-1">
+                {archivosSeleccionados.map((f, idx) => (
+                  <li key={idx} className="flex items-center justify-between bg-[#F2EEE3] rounded-sm px-2.5 py-1.5 text-xs text-[#4A463D]">
+                    <span className="truncate pr-2">{f.name}</span>
+                    <button type="button" onClick={() => quitarArchivo(idx)} className="text-[#8A8578] hover:text-red flex-shrink-0">
+                      <X size={13} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Field>
+
+          <button type="submit" disabled={subiendo} className="w-full mt-2 bg-ink text-paper py-2.5 rounded-sm text-sm font-medium hover:bg-[#333731] disabled:opacity-60">
+            {subiendo ? "Subiendo..." : "Registrar"}
           </button>
         </form>
 
         <div className="w-full">
           <h2 className="font-display text-xl font-semibold text-ink mb-3">Historial de Taller</h2>
           <div className="bg-white border border-line rounded-sm overflow-x-auto w-full">
-            <table className="w-full text-sm min-w-[700px]">
+            <table className="w-full text-sm min-w-[760px]">
               <thead>
                 <tr className="text-left text-xs uppercase text-[#6B6558] border-b border-line">
                   <th className="px-4 py-3 font-medium">Fecha</th>
@@ -148,10 +201,11 @@ export default function TallerPage() {
                   <th className="px-4 py-3 font-medium">Duración</th>
                   <th className="px-4 py-3 font-medium">Personas</th>
                   <th className="px-4 py-3 font-medium">Materiales</th>
+                  <th className="px-4 py-3 font-medium">Archivos</th>
                 </tr>
               </thead>
               <tbody>
-                {loading && <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-[#8A8578]">Cargando...</td></tr>}
+                {loading && <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-[#8A8578]">Cargando...</td></tr>}
                 {!loading && registros.map((r, idx) => (
                   <tr key={r.id} className={idx !== registros.length - 1 ? "border-b border-[#EFEBE0]" : ""}>
                     <td className="px-4 py-3 text-[#6B6558] font-mono whitespace-nowrap">{new Date(r.fecha).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}</td>
@@ -166,10 +220,17 @@ export default function TallerPage() {
                         </button>
                       ) : "—"}
                     </td>
+                    <td className="px-4 py-3">
+                      {r.archivos && r.archivos.length > 0 ? (
+                        <button onClick={() => setVerDetalle(r)} className="inline-flex items-center gap-1 text-xs text-[#3B5166] hover:underline">
+                          <Paperclip size={13} /> {r.archivos.length}
+                        </button>
+                      ) : "—"}
+                    </td>
                   </tr>
                 ))}
                 {!loading && registros.length === 0 && (
-                  <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-[#8A8578]">Aún no hay registros de Taller</td></tr>
+                  <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-[#8A8578]">Aún no hay registros de Taller</td></tr>
                 )}
               </tbody>
             </table>
@@ -182,7 +243,23 @@ export default function TallerPage() {
           <div className="bg-card w-full max-w-lg rounded-sm border border-line shadow-2xl p-5" onClick={(e) => e.stopPropagation()}>
             <h3 className="font-display text-xl font-semibold mb-1">{verDetalle.cliente || "Sin cliente"}</h3>
             <p className="text-xs text-[#8A8578] mb-4">{new Date(verDetalle.fecha).toLocaleString("es-MX")}</p>
-            <p className="text-sm text-[#4A463D] whitespace-pre-wrap">{verDetalle.descripcion_materiales}</p>
+            {verDetalle.descripcion_materiales && (
+              <p className="text-sm text-[#4A463D] whitespace-pre-wrap mb-4">{verDetalle.descripcion_materiales}</p>
+            )}
+            {verDetalle.archivos && verDetalle.archivos.length > 0 && (
+              <div>
+                <p className="text-xs uppercase tracking-wide text-[#6B6558] mb-2">Archivos adjuntos</p>
+                <ul className="space-y-1.5">
+                  {verDetalle.archivos.map((a, idx) => (
+                    <li key={idx}>
+                      <a href={a.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-[#3B5166] hover:underline">
+                        <FileText size={14} /> {a.name}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         </div>
       )}
