@@ -27,6 +27,7 @@ export default function IngresoEgresoPage() {
   const [form, setForm] = useState({ insumoId: "", tipo: "entrada", cantidad: "", producto: "", nota: "" });
   const [historial, setHistorial] = useState([]);
   const [historialLoading, setHistorialLoading] = useState(true);
+  const [enviando, setEnviando] = useState(false);
 
   const insumosVisibles = esAdmin ? insumos.filter((i) => i.deposito === depositoSel) : insumos;
 
@@ -68,9 +69,29 @@ export default function IngresoEgresoPage() {
   async function submit(e) {
     e.preventDefault();
     setError(null);
+    if (enviando) return; // evita doble clic
+
     const insumo = insumos.find((i) => i.id === Number(form.insumoId));
     const cant = Number(form.cantidad);
-    if (!insumo || !cant) return;
+
+    if (!insumo) {
+      setError("Elegí un insumo.");
+      return;
+    }
+    if (!cant || cant <= 0) {
+      setError("La cantidad tiene que ser un número mayor a 0.");
+      return;
+    }
+    if (form.tipo === "salida" && cant > insumo.stock) {
+      setError(`No hay suficiente stock: quedan ${insumo.stock} ${insumo.unidad} de ${insumo.nombre}.`);
+      return;
+    }
+    if (form.tipo === "salida" && !form.nota.trim()) {
+      setError("Falta indicar quién retira el insumo.");
+      return;
+    }
+
+    setEnviando(true);
 
     // 1. Calcular cómo queda el stock con este movimiento
     const nuevoStock = form.tipo === "entrada" ? insumo.stock + cant : insumo.stock - cant;
@@ -87,6 +108,7 @@ export default function IngresoEgresoPage() {
     });
     if (movError) {
       setError(movError.message);
+      setEnviando(false);
       return;
     }
 
@@ -94,6 +116,7 @@ export default function IngresoEgresoPage() {
     const { error: stockError } = await supabase.from("insumos").update({ stock: nuevoStock }).eq("id", insumo.id);
     if (stockError) {
       setError(stockError.message);
+      setEnviando(false);
       return;
     }
 
@@ -102,6 +125,7 @@ export default function IngresoEgresoPage() {
     setForm({ insumoId: "", tipo: "entrada", cantidad: "", producto: "", nota: "" });
     setTimeout(() => setConfirmacion(null), 3500);
     cargarHistorial();
+    setEnviando(false);
   }
 
   return (
@@ -195,8 +219,8 @@ export default function IngresoEgresoPage() {
             />
           </Field>
 
-          <button type="submit" className="w-full mt-2 bg-ink text-paper py-2.5 rounded-sm text-sm font-medium hover:bg-[#333731]">
-            Registrar {form.tipo === "entrada" ? "ingreso" : "egreso"}
+          <button type="submit" disabled={enviando} className="w-full mt-2 bg-ink text-paper py-2.5 rounded-sm text-sm font-medium hover:bg-[#333731] disabled:opacity-60">
+            {enviando ? "Guardando..." : `Registrar ${form.tipo === "entrada" ? "ingreso" : "egreso"}`}
           </button>
         </form>
 
