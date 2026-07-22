@@ -39,6 +39,7 @@ export default function TrabajosPage() {
   const [error, setError] = useState(null);
   const [confirmacion, setConfirmacion] = useState(null);
   const [form, setForm] = useState(emptyForm);
+  const [enviando, setEnviando] = useState(false);
   const [filtroTipo, setFiltroTipo] = useState("Todos");
   const [tarjeta, setTarjeta] = useState(null);
 
@@ -83,7 +84,9 @@ export default function TrabajosPage() {
 
   async function submit(e) {
     e.preventDefault();
+    if (enviando) return;
     setError(null);
+    setEnviando(true);
     const metros_cuadrados = form.tipo === "Corte Láser" ? calcularM2(form.largo_mm, form.ancho_mm, form.cantidad) : null;
     const { error } = await supabase.from("trabajos").insert({
       tipo: form.tipo,
@@ -98,6 +101,7 @@ export default function TrabajosPage() {
       metros_cuadrados,
       usuario_email: session?.user?.email || null,
     });
+    setEnviando(false);
     if (error) {
       setError(error.message);
       return;
@@ -214,8 +218,8 @@ export default function TrabajosPage() {
             <input className={inputCls} value={form.material} onChange={(e) => setForm({ ...form, material: e.target.value })} placeholder="Ej. Chapa de acero 3mm" />
           </Field>
 
-          <button type="submit" className="w-full mt-2 bg-ink text-paper py-2.5 rounded-sm text-sm font-medium hover:bg-[#333731]">
-            Registrar trabajo
+          <button type="submit" disabled={enviando} className="w-full mt-2 bg-ink text-paper py-2.5 rounded-sm text-sm font-medium hover:bg-[#333731] disabled:opacity-60">
+            {enviando ? "Guardando..." : "Registrar trabajo"}
           </button>
         </form>
 
