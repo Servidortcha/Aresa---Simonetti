@@ -62,6 +62,7 @@ export default function TallerPage() {
 
   async function submit(e) {
     e.preventDefault();
+    if (subiendo) return;
     setError(null);
     setSubiendo(true);
 
