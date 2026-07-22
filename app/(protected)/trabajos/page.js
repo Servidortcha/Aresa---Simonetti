@@ -262,7 +262,7 @@ export default function TrabajosPage() {
               <tbody>
                 {loading && <tr><td colSpan={9} className="px-4 py-8 text-center text-sm text-[#8A8578]">Cargando...</td></tr>}
                 {!loading && trabajosFiltrados.map((t, idx) => (
-                  <tr key={t.id} className={idx !== trabajosFiltrados.length - 1 ? "border-b border-[#EFEBE0]" : ""}>
+                  <tr key={t.id} className={`${idx % 2 === 1 ? "bg-[#F7F4EC]" : ""} ${idx !== trabajosFiltrados.length - 1 ? "border-b border-[#EFEBE0]" : ""}`}>
                     <td className="px-4 py-3 text-[#6B6558] font-mono whitespace-nowrap">{new Date(t.fecha).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}</td>
                     <td className="px-4 py-3">
                       <span
