@@ -68,7 +68,10 @@ export default function TallerPage() {
     // 1. Subir cada archivo seleccionado a Supabase Storage
     const archivosSubidos = [];
     for (const file of archivosSeleccionados) {
-      const path = `${Date.now()}-${file.name}`;
+      const nombreSeguro = file.name
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // quita acentos
+        .replace(/[^a-zA-Z0-9._-]/g, "_"); // reemplaza cualquier otro caracter raro
+      const path = `${Date.now()}-${nombreSeguro}`;
       const { error: uploadError } = await supabase.storage.from("taller-archivos").upload(path, file);
       if (uploadError) {
         setError(`Error al subir ${file.name}: ${uploadError.message}`);
