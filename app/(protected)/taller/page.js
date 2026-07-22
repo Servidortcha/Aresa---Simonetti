@@ -211,7 +211,7 @@ export default function TallerPage() {
               <tbody>
                 {loading && <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-[#8A8578]">Cargando...</td></tr>}
                 {!loading && registros.map((r, idx) => (
-                  <tr key={r.id} className={idx !== registros.length - 1 ? "border-b border-[#EFEBE0]" : ""}>
+                  <tr key={r.id} className={`${idx % 2 === 1 ? "bg-[#F7F4EC]" : ""} ${idx !== registros.length - 1 ? "border-b border-[#EFEBE0]" : ""}`}>
                     <td className="px-4 py-3 text-[#6B6558] font-mono whitespace-nowrap">{new Date(r.fecha).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}</td>
                     <td className="px-4 py-3 text-[#4A463D] whitespace-nowrap">{r.cliente || "—"}</td>
                     <td className="px-4 py-3 font-mono">{r.cantidad ?? "—"}</td>
