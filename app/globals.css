@@ -17,3 +17,69 @@ body {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* Tarjeta imprimible (Trabajos) */
+.print-card {
+  font-family: 'Inter', sans-serif;
+  color: #1C1F1C;
+  padding: 32px;
+  max-width: 480px;
+}
+.pc-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  border-bottom: 2px solid #1C1F1C;
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+}
+.pc-empresa {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+}
+.pc-tipo {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #F4791E;
+  font-weight: 600;
+}
+.pc-tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.pc-tabla td {
+  padding: 8px 0;
+  border-bottom: 1px solid #E4DFD3;
+  vertical-align: top;
+}
+.pc-label {
+  color: #6B6558;
+  width: 130px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.pc-footer {
+  margin-top: 24px;
+  font-size: 10px;
+  color: #B0AA9A;
+  text-align: center;
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-card, .print-card * {
+    visibility: visible;
+  }
+  .print-card {
+    display: block !important;
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+}
