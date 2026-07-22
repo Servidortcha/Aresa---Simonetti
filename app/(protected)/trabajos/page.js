@@ -44,6 +44,17 @@ export default function TrabajosPage() {
 
   function imprimirTarjeta(t) {
     setTarjeta(t);
+    const tituloOriginal = document.title;
+    const nombreCliente = (t.cliente || "sin-cliente").replace(/[^a-zA-Z0-9 _-]/g, "").trim().replace(/\s+/g, "-");
+    const fecha = new Date(t.fecha).toISOString().slice(0, 10);
+    document.title = `Trabajo-${nombreCliente}-${fecha}`;
+
+    function restaurarTitulo() {
+      document.title = tituloOriginal;
+      window.removeEventListener("afterprint", restaurarTitulo);
+    }
+    window.addEventListener("afterprint", restaurarTitulo);
+
     setTimeout(() => window.print(), 100);
   }
 
