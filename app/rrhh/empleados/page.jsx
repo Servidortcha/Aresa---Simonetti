@@ -41,6 +41,7 @@ export default function EmpleadosPage() {
     setLoading(true);
     let query = supabase
       .from("empleados")
+      .select("*")
       .order("apellido", { ascending: true });
 
     if (!mostrarInactivos) {
