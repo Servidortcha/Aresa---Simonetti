@@ -9,23 +9,28 @@ const supabase = createClient(
 );
 
 const emptyForm = {
-  legajo_nro: "",
-  apellido: "",
+  codigo: "",
   nombre: "",
-  domicilio: "",
-  localidad: "",
-  cuil: "",
-  fecha_ingreso: "",
-  fecha_antiguedad: "",
-  categoria: "",
-  tipo_contrato: "Pers. Construcción",
-  sueldo_basico: "",
-  banco: "",
-  lugar_pago: "",
+  tipo: "haber_con_desc",
+  modo_calculo: "manual",
+  porcentaje: "",
+  orden: "",
 };
 
-export default function EmpleadosPage() {
-  const [empleados, setEmpleados] = useState([]);
+const TIPO_LABEL = {
+  haber_con_desc: "Haber con descuento",
+  haber_sin_desc: "Haber sin descuento",
+  descuento: "Descuento",
+};
+
+const MODO_LABEL = {
+  porcentaje_basico: "% del básico",
+  monto_fijo: "Monto fijo",
+  manual: "Manual (se carga cada vez)",
+};
+
+export default function ConceptosPage() {
+  const [conceptos, setConceptos] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [editId, setEditId] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -34,15 +39,15 @@ export default function EmpleadosPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    cargarEmpleados();
+    cargarConceptos();
   }, [mostrarInactivos]);
 
-  async function cargarEmpleados() {
+  async function cargarConceptos() {
     setLoading(true);
     let query = supabase
-      .from("empleados")
+      .from("conceptos")
       .select("*")
-      .order("apellido", { ascending: true });
+      .order("orden", { ascending: true });
 
     if (!mostrarInactivos) {
       query = query.eq("activo", true);
@@ -50,9 +55,9 @@ export default function EmpleadosPage() {
 
     const { data, error } = await query;
     if (error) {
-      setError("Error al cargar empleados: " + error.message);
+      setError("Error al cargar conceptos: " + error.message);
     } else {
-      setEmpleados(data);
+      setConceptos(data);
       setError("");
     }
     setLoading(false);
@@ -64,17 +69,15 @@ export default function EmpleadosPage() {
   }
 
   function validarForm() {
-    if (!form.legajo_nro.trim()) return "El legajo es obligatorio";
-    if (!form.apellido.trim()) return "El apellido es obligatorio";
     if (!form.nombre.trim()) return "El nombre es obligatorio";
-    if (!form.sueldo_basico || isNaN(Number(form.sueldo_basico)))
-      return "El sueldo básico debe ser un número válido";
+    if (form.modo_calculo === "porcentaje_basico" && !form.porcentaje)
+      return "Si el modo es % del básico, tenés que indicar el porcentaje";
     return null;
   }
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (saving) return; // evita doble envío
+    if (saving) return;
 
     const errorValidacion = validarForm();
     if (errorValidacion) {
@@ -86,20 +89,22 @@ export default function EmpleadosPage() {
     setError("");
 
     const payload = {
-      ...form,
-      sueldo_basico: Number(form.sueldo_basico),
-      fecha_ingreso: form.fecha_ingreso || null,
-      fecha_antiguedad: form.fecha_antiguedad || null,
+      codigo: form.codigo || null,
+      nombre: form.nombre,
+      tipo: form.tipo,
+      modo_calculo: form.modo_calculo,
+      porcentaje:
+        form.modo_calculo === "porcentaje_basico" && form.porcentaje
+          ? Number(form.porcentaje)
+          : null,
+      orden: form.orden ? Number(form.orden) : 0,
     };
 
     let result;
     if (editId) {
-      result = await supabase
-        .from("empleados")
-        .update(payload)
-        .eq("id", editId);
+      result = await supabase.from("conceptos").update(payload).eq("id", editId);
     } else {
-      result = await supabase.from("empleados").insert([payload]);
+      result = await supabase.from("conceptos").insert([payload]);
     }
 
     if (result.error) {
@@ -107,27 +112,20 @@ export default function EmpleadosPage() {
     } else {
       setForm(emptyForm);
       setEditId(null);
-      await cargarEmpleados();
+      await cargarConceptos();
     }
     setSaving(false);
   }
 
-  function handleEditar(emp) {
-    setEditId(emp.id);
+  function handleEditar(c) {
+    setEditId(c.id);
     setForm({
-      legajo_nro: emp.legajo_nro || "",
-      apellido: emp.apellido || "",
-      nombre: emp.nombre || "",
-      domicilio: emp.domicilio || "",
-      localidad: emp.localidad || "",
-      cuil: emp.cuil || "",
-      fecha_ingreso: emp.fecha_ingreso || "",
-      fecha_antiguedad: emp.fecha_antiguedad || "",
-      categoria: emp.categoria || "",
-      tipo_contrato: emp.tipo_contrato || "Pers. Construcción",
-      sueldo_basico: emp.sueldo_basico ?? "",
-      banco: emp.banco || "",
-      lugar_pago: emp.lugar_pago || "",
+      codigo: c.codigo || "",
+      nombre: c.nombre || "",
+      tipo: c.tipo,
+      modo_calculo: c.modo_calculo,
+      porcentaje: c.porcentaje ?? "",
+      orden: c.orden ?? "",
     });
   }
 
@@ -137,30 +135,32 @@ export default function EmpleadosPage() {
     setError("");
   }
 
-  async function handleArchivar(emp) {
-    const nuevoEstado = !emp.activo;
+  async function handleArchivar(c) {
+    const nuevoEstado = !c.activo;
     const confirmMsg = nuevoEstado
-      ? `¿Reactivar a ${emp.apellido}, ${emp.nombre}?`
-      : `¿Archivar a ${emp.apellido}, ${emp.nombre}? No se va a poder liquidar mientras esté archivado.`;
-
+      ? `¿Reactivar "${c.nombre}"?`
+      : `¿Archivar "${c.nombre}"? Ya no va a aparecer al liquidar.`;
     if (!window.confirm(confirmMsg)) return;
 
     const { error } = await supabase
-      .from("empleados")
+      .from("conceptos")
       .update({ activo: nuevoEstado })
-      .eq("id", emp.id);
+      .eq("id", c.id);
 
     if (error) {
       setError("Error al actualizar estado: " + error.message);
     } else {
-      await cargarEmpleados();
+      await cargarConceptos();
     }
   }
 
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6" style={{ fontFamily: "Space Grotesk, sans-serif", color: "#163A5F" }}>
-        Empleados
+      <h1
+        className="text-2xl font-bold mb-6"
+        style={{ fontFamily: "Space Grotesk, sans-serif", color: "#163A5F" }}
+      >
+        Conceptos de Liquidación
       </h1>
 
       {error && (
@@ -169,33 +169,60 @@ export default function EmpleadosPage() {
         </div>
       )}
 
-      {/* Formulario alta/edición */}
       <form
         onSubmit={handleSubmit}
         className="bg-white border rounded-lg p-4 md:p-6 mb-8 shadow-sm"
       >
         <h2 className="font-semibold mb-4" style={{ color: "#2E6F9E" }}>
-          {editId ? "Editar empleado" : "Nuevo empleado"}
+          {editId ? "Editar concepto" : "Nuevo concepto"}
         </h2>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Campo label="Legajo N°" name="legajo_nro" value={form.legajo_nro} onChange={handleChange} />
-          <Campo label="Apellido" name="apellido" value={form.apellido} onChange={handleChange} />
+          <Campo label="Código" name="codigo" value={form.codigo} onChange={handleChange} />
           <Campo label="Nombre" name="nombre" value={form.nombre} onChange={handleChange} />
+          <Campo label="Orden" name="orden" type="number" value={form.orden} onChange={handleChange} />
 
-          <Campo label="C.U.I.L." name="cuil" value={form.cuil} onChange={handleChange} placeholder="20-12345678-9" />
-          <Campo label="Domicilio" name="domicilio" value={form.domicilio} onChange={handleChange} />
-          <Campo label="Localidad" name="localidad" value={form.localidad} onChange={handleChange} />
+          <div>
+            <label className="block text-sm font-medium mb-1">Tipo</label>
+            <select
+              name="tipo"
+              value={form.tipo}
+              onChange={handleChange}
+              className="w-full border rounded px-3 py-2 text-sm"
+            >
+              {Object.entries(TIPO_LABEL).map(([k, v]) => (
+                <option key={k} value={k}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </div>
 
-          <Campo label="Categoría" name="categoria" value={form.categoria} onChange={handleChange} placeholder="Ayudante, Oficial..." />
-          <Campo label="Tipo de contrato" name="tipo_contrato" value={form.tipo_contrato} onChange={handleChange} />
-          <Campo label="Sueldo Básico" name="sueldo_basico" type="number" value={form.sueldo_basico} onChange={handleChange} />
+          <div>
+            <label className="block text-sm font-medium mb-1">Modo de cálculo</label>
+            <select
+              name="modo_calculo"
+              value={form.modo_calculo}
+              onChange={handleChange}
+              className="w-full border rounded px-3 py-2 text-sm"
+            >
+              {Object.entries(MODO_LABEL).map(([k, v]) => (
+                <option key={k} value={k}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </div>
 
-          <Campo label="Fecha de Ingreso" name="fecha_ingreso" type="date" value={form.fecha_ingreso} onChange={handleChange} />
-          <Campo label="Fecha Antigüedad" name="fecha_antiguedad" type="date" value={form.fecha_antiguedad} onChange={handleChange} />
-          <Campo label="Banco" name="banco" value={form.banco} onChange={handleChange} />
-
-          <Campo label="Lugar de pago" name="lugar_pago" value={form.lugar_pago} onChange={handleChange} />
+          {form.modo_calculo === "porcentaje_basico" && (
+            <Campo
+              label="Porcentaje (%)"
+              name="porcentaje"
+              type="number"
+              value={form.porcentaje}
+              onChange={handleChange}
+            />
+          )}
         </div>
 
         <div className="mt-4 flex gap-2">
@@ -205,7 +232,7 @@ export default function EmpleadosPage() {
             className="px-4 py-2 rounded text-white font-medium disabled:opacity-50"
             style={{ backgroundColor: "#2E6F9E" }}
           >
-            {saving ? "Guardando..." : editId ? "Guardar cambios" : "Agregar empleado"}
+            {saving ? "Guardando..." : editId ? "Guardar cambios" : "Agregar concepto"}
           </button>
           {editId && (
             <button
@@ -219,7 +246,6 @@ export default function EmpleadosPage() {
         </div>
       </form>
 
-      {/* Listado */}
       <div className="flex items-center justify-between mb-3">
         <h2 className="font-semibold" style={{ color: "#2E6F9E" }}>
           Listado
@@ -241,60 +267,46 @@ export default function EmpleadosPage() {
           <table className="w-full text-sm">
             <thead style={{ backgroundColor: "#163A5F" }}>
               <tr className="text-white text-left">
-                <th className="p-2">Legajo</th>
-                <th className="p-2">Apellido y Nombre</th>
-                <th className="p-2">CUIL</th>
-                <th className="p-2">Categoría</th>
-                <th className="p-2">Sueldo Básico</th>
+                <th className="p-2">Orden</th>
+                <th className="p-2">Código</th>
+                <th className="p-2">Nombre</th>
+                <th className="p-2">Tipo</th>
+                <th className="p-2">Modo de cálculo</th>
+                <th className="p-2">%</th>
                 <th className="p-2">Estado</th>
                 <th className="p-2">Acciones</th>
               </tr>
             </thead>
             <tbody>
-              {empleados.map((emp, i) => (
-                <tr
-                  key={emp.id}
-                  className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}
-                >
-                  <td className="p-2">{emp.legajo_nro}</td>
+              {conceptos.map((c, i) => (
+                <tr key={c.id} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                  <td className="p-2">{c.orden}</td>
+                  <td className="p-2">{c.codigo}</td>
+                  <td className="p-2">{c.nombre}</td>
+                  <td className="p-2">{TIPO_LABEL[c.tipo]}</td>
+                  <td className="p-2">{MODO_LABEL[c.modo_calculo]}</td>
+                  <td className="p-2">{c.porcentaje ? `${c.porcentaje}%` : "-"}</td>
                   <td className="p-2">
-                    {emp.apellido}, {emp.nombre}
-                  </td>
-                  <td className="p-2">{emp.cuil}</td>
-                  <td className="p-2">{emp.categoria}</td>
-                  <td className="p-2">
-                    {Number(emp.sueldo_basico).toLocaleString("es-AR", {
-                      style: "currency",
-                      currency: "ARS",
-                    })}
-                  </td>
-                  <td className="p-2">
-                    {emp.activo ? (
+                    {c.activo ? (
                       <span className="text-green-700">Activo</span>
                     ) : (
                       <span className="text-gray-400">Archivado</span>
                     )}
                   </td>
                   <td className="p-2 flex gap-2">
-                    <button
-                      onClick={() => handleEditar(emp)}
-                      className="text-blue-700 underline"
-                    >
+                    <button onClick={() => handleEditar(c)} className="text-blue-700 underline">
                       Editar
                     </button>
-                    <button
-                      onClick={() => handleArchivar(emp)}
-                      className="text-red-600 underline"
-                    >
-                      {emp.activo ? "Archivar" : "Reactivar"}
+                    <button onClick={() => handleArchivar(c)} className="text-red-600 underline">
+                      {c.activo ? "Archivar" : "Reactivar"}
                     </button>
                   </td>
                 </tr>
               ))}
-              {empleados.length === 0 && (
+              {conceptos.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="p-4 text-center text-gray-500">
-                    No hay empleados cargados.
+                  <td colSpan={8} className="p-4 text-center text-gray-500">
+                    No hay conceptos cargados.
                   </td>
                 </tr>
               )}
@@ -306,18 +318,15 @@ export default function EmpleadosPage() {
   );
 }
 
-function Campo({ label, name, value, onChange, type = "text", placeholder = "" }) {
+function Campo({ label, name, value, onChange, type = "text" }) {
   return (
     <div>
-      <label className="block text-sm font-medium mb-1" style={{ color: "#0B0E13" }}>
-        {label}
-      </label>
+      <label className="block text-sm font-medium mb-1">{label}</label>
       <input
         type={type}
         name={name}
         value={value}
         onChange={onChange}
-        placeholder={placeholder}
         className="w-full border rounded px-3 py-2 text-sm"
       />
     </div>
