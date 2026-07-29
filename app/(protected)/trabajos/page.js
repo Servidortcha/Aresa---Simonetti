@@ -5,10 +5,21 @@ import { useRouter } from "next/navigation";
 import * as XLSX from "xlsx";
 import { supabase } from "../../../lib/supabaseClient";
 import { useAuth } from "../../../lib/AuthContext";
-import { Wrench, Download, Printer } from "lucide-react";
+import { Wrench, Download, Printer, Paperclip, Pencil, FileText, X } from "lucide-react";
 
 const TIPOS = ["Corte Láser", "Tornería"];
-const emptyForm = { tipo: TIPOS[0], cliente: "", descripcion: "", cantidad: "", duracion_minutos: "", duracion_horas: "", material: "", largo_mm: "", ancho_mm: "" };
+const emptyForm = {
+  tipo: TIPOS[0],
+  cliente: "",
+  descripcion: "",
+  cantidad: "",
+  duracion_minutos: "",
+  duracion_horas: "",
+  material: "",
+  largo_mm: "",
+  ancho_mm: "",
+  confirmado: true,
+};
 
 const inputCls = "w-full px-3 py-2 bg-white border border-line rounded-sm text-sm text-ink focus:outline-none focus:ring-2 focus:ring-green focus:border-transparent";
 
@@ -26,7 +37,7 @@ function calcularM2(largo, ancho, cantidad) {
   const a = Number(ancho);
   const c = Number(cantidad) || 1;
   if (!l || !a) return null;
-  return (l * a * c) / 1_000_000; // mm² -> m², multiplicado por cantidad de piezas
+  return (l * a * c) / 1_000_000;
 }
 
 export default function TrabajosPage() {
@@ -39,31 +50,23 @@ export default function TrabajosPage() {
   const [error, setError] = useState(null);
   const [confirmacion, setConfirmacion] = useState(null);
   const [form, setForm] = useState(emptyForm);
+  const [editingId, setEditingId] = useState(null);
+  const [archivoSeleccionado, setArchivoSeleccionado] = useState(null);
+  const [archivoActual, setArchivoActual] = useState(null);
   const [enviando, setEnviando] = useState(false);
   const [filtroTipo, setFiltroTipo] = useState("Todos");
+  const [filtroEstado, setFiltroEstado] = useState("Todos");
   const [tarjeta, setTarjeta] = useState(null);
-
-  function imprimirTarjeta(t) {
-    setTarjeta(t);
-    const tituloOriginal = document.title;
-    const nombreCliente = (t.cliente || "sin-cliente").replace(/[^a-zA-Z0-9 _-]/g, "").trim().replace(/\s+/g, "-");
-    const fecha = new Date(t.fecha).toISOString().slice(0, 10);
-    document.title = `Trabajo-${nombreCliente}-${fecha}`;
-
-    function restaurarTitulo() {
-      document.title = tituloOriginal;
-      window.removeEventListener("afterprint", restaurarTitulo);
-    }
-    window.addEventListener("afterprint", restaurarTitulo);
-
-    setTimeout(() => window.print(), 100);
-  }
 
   const esLaser = form.tipo === "Corte Láser";
   const m2Preview = useMemo(() => calcularM2(form.largo_mm, form.ancho_mm, form.cantidad), [form.largo_mm, form.ancho_mm, form.cantidad]);
+
   const trabajosFiltrados = useMemo(
-    () => (filtroTipo === "Todos" ? trabajos : trabajos.filter((t) => t.tipo === filtroTipo)),
-    [trabajos, filtroTipo]
+    () =>
+      trabajos
+        .filter((t) => filtroTipo === "Todos" || t.tipo === filtroTipo)
+        .filter((t) => filtroEstado === "Todos" || (filtroEstado === "Pendientes" ? !t.confirmado : t.confirmado)),
+    [trabajos, filtroTipo, filtroEstado]
   );
 
   async function cargar() {
@@ -82,13 +85,60 @@ export default function TrabajosPage() {
     if (rol && !puedeAcceder) router.replace("/ingreso-egreso");
   }, [rol, puedeAcceder, router]);
 
+  function abrirNuevo() {
+    setEditingId(null);
+    setForm(emptyForm);
+    setArchivoSeleccionado(null);
+    setArchivoActual(null);
+    setError(null);
+  }
+
+  function abrirEditar(t) {
+    setEditingId(t.id);
+    setForm({
+      tipo: t.tipo,
+      cliente: t.cliente || "",
+      descripcion: t.descripcion || "",
+      cantidad: t.cantidad != null ? String(t.cantidad) : "",
+      duracion_minutos: t.duracion_minutos != null ? String(t.duracion_minutos) : "",
+      duracion_horas: t.duracion_horas != null ? String(t.duracion_horas) : "",
+      material: t.material || "",
+      largo_mm: t.largo_mm != null ? String(t.largo_mm) : "",
+      ancho_mm: t.ancho_mm != null ? String(t.ancho_mm) : "",
+      confirmado: t.confirmado,
+    });
+    setArchivoSeleccionado(null);
+    setArchivoActual(t.archivo_dxf || null);
+    setError(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   async function submit(e) {
     e.preventDefault();
     if (enviando) return;
     setError(null);
     setEnviando(true);
-    const metros_cuadrados = form.tipo === "Corte Láser" ? calcularM2(form.largo_mm, form.ancho_mm, form.cantidad) : null;
-    const { error } = await supabase.from("trabajos").insert({
+
+    // 1. Si hay un archivo nuevo seleccionado, subirlo primero.
+    let archivo_dxf = editingId ? undefined : null; // undefined = no tocar el campo al editar si no se sube uno nuevo
+    if (archivoSeleccionado) {
+      const nombreSeguro = archivoSeleccionado.name
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-zA-Z0-9._-]/g, "_");
+      const path = `${Date.now()}-${nombreSeguro}`;
+      const { error: uploadError } = await supabase.storage.from("trabajos-archivos").upload(path, archivoSeleccionado);
+      if (uploadError) {
+        setError("Error al subir el archivo: " + uploadError.message);
+        setEnviando(false);
+        return;
+      }
+      const { data: pub } = supabase.storage.from("trabajos-archivos").getPublicUrl(path);
+      archivo_dxf = { name: archivoSeleccionado.name, url: pub.publicUrl };
+    }
+
+    const metros_cuadrados = esLaser ? calcularM2(form.largo_mm, form.ancho_mm, form.cantidad) : null;
+
+    const payload = {
       tipo: form.tipo,
       cliente: form.cliente || null,
       descripcion: form.descripcion || null,
@@ -96,26 +146,54 @@ export default function TrabajosPage() {
       duracion_minutos: esLaser && form.duracion_minutos ? Number(form.duracion_minutos) : null,
       duracion_horas: !esLaser && form.duracion_horas ? Number(form.duracion_horas) : null,
       material: form.material || null,
-      largo_mm: form.tipo === "Corte Láser" && form.largo_mm ? Number(form.largo_mm) : null,
-      ancho_mm: form.tipo === "Corte Láser" && form.ancho_mm ? Number(form.ancho_mm) : null,
+      largo_mm: esLaser && form.largo_mm ? Number(form.largo_mm) : null,
+      ancho_mm: esLaser && form.ancho_mm ? Number(form.ancho_mm) : null,
       metros_cuadrados,
-      usuario_email: session?.user?.email || null,
-    });
+      confirmado: form.confirmado,
+    };
+    if (archivo_dxf !== undefined) payload.archivo_dxf = archivo_dxf;
+
+    let error;
+    if (editingId) {
+      ({ error } = await supabase.from("trabajos").update(payload).eq("id", editingId));
+    } else {
+      payload.usuario_email = session?.user?.email || null;
+      ({ error } = await supabase.from("trabajos").insert(payload));
+    }
+
     setEnviando(false);
     if (error) {
       setError(error.message);
       return;
     }
     setForm(emptyForm);
-    setConfirmacion("Trabajo registrado");
+    setEditingId(null);
+    setArchivoSeleccionado(null);
+    setArchivoActual(null);
+    setConfirmacion(editingId ? "Trabajo actualizado" : "Trabajo registrado");
     setTimeout(() => setConfirmacion(null), 3000);
     cargar();
+  }
+
+  function imprimirTarjeta(t) {
+    setTarjeta(t);
+    const tituloOriginal = document.title;
+    const nombreCliente = (t.cliente || "sin-cliente").replace(/[^a-zA-Z0-9 _-]/g, "").trim().replace(/\s+/g, "-");
+    const fecha = new Date(t.fecha).toISOString().slice(0, 10);
+    document.title = `Trabajo-${nombreCliente}-${fecha}`;
+    function restaurarTitulo() {
+      document.title = tituloOriginal;
+      window.removeEventListener("afterprint", restaurarTitulo);
+    }
+    window.addEventListener("afterprint", restaurarTitulo);
+    setTimeout(() => window.print(), 100);
   }
 
   function exportarExcel() {
     const filas = trabajosFiltrados.map((t) => ({
       Fecha: new Date(t.fecha).toLocaleString("es-MX"),
       Tipo: t.tipo,
+      Estado: t.confirmado ? "Confirmado" : "Pendiente",
       Cliente: t.cliente || "",
       Descripción: t.descripcion || "",
       Cantidad: t.cantidad ?? "",
@@ -152,6 +230,15 @@ export default function TrabajosPage() {
 
       <div className="flex flex-col gap-6">
         <form onSubmit={submit} className="bg-white border border-line rounded-sm p-4 sm:p-6 w-full max-w-2xl">
+          {editingId && (
+            <div className="flex items-center justify-between bg-[#F2EEE3] border border-line rounded-sm px-3 py-2 mb-4 text-xs text-[#6B6558]">
+              Editando trabajo existente
+              <button type="button" onClick={abrirNuevo} className="text-[#3B5166] hover:underline flex items-center gap-1">
+                <X size={13} /> Cancelar edición
+              </button>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
             <Field label="Tipo de trabajo">
               <div className="flex gap-2">
@@ -159,8 +246,9 @@ export default function TrabajosPage() {
                   <button
                     type="button"
                     key={t}
+                    disabled={!!editingId}
                     onClick={() => setForm({ ...form, tipo: t })}
-                    className="flex-1 py-2 rounded-sm text-sm font-medium border transition-colors"
+                    className="flex-1 py-2 rounded-sm text-sm font-medium border transition-colors disabled:opacity-50"
                     style={{
                       backgroundColor: form.tipo === t ? "#4A4B4D" : "white",
                       color: form.tipo === t ? "white" : "#1C1F1C",
@@ -218,49 +306,93 @@ export default function TrabajosPage() {
             <input className={inputCls} value={form.material} onChange={(e) => setForm({ ...form, material: e.target.value })} placeholder="Ej. Chapa de acero 3mm" />
           </Field>
 
+          {esLaser && (
+            <Field label={editingId ? "Reemplazar archivo DXF (opcional)" : "Archivo DXF para el operador (opcional)"}>
+              <label className="flex items-center gap-2 border border-dashed border-line rounded-sm px-3 py-2.5 text-sm text-[#6B6558] cursor-pointer hover:bg-[#F2EEE3] transition-colors">
+                <Paperclip size={15} />
+                {archivoSeleccionado ? archivoSeleccionado.name : "Elegir archivo .dxf"}
+                <input type="file" accept=".dxf" className="hidden" onChange={(e) => setArchivoSeleccionado(e.target.files?.[0] || null)} />
+              </label>
+              {editingId && archivoActual && !archivoSeleccionado && (
+                <p className="text-xs text-[#8A8578] mt-1">
+                  Ya tiene <a href={archivoActual.url} target="_blank" rel="noopener noreferrer" className="underline">{archivoActual.name}</a> cargado — elegí uno nuevo solo si querés reemplazarlo.
+                </p>
+              )}
+            </Field>
+          )}
+
+          <label className="flex items-center gap-2 text-sm text-ink mb-4 mt-1 cursor-pointer">
+            <input type="checkbox" checked={form.confirmado} onChange={(e) => setForm({ ...form, confirmado: e.target.checked })} />
+            Confirmado (el corte ya se hizo y los datos están completos)
+          </label>
+          {!form.confirmado && (
+            <p className="text-xs text-[#B25A1E] -mt-3 mb-4">
+              Va a quedar como <b>pendiente</b> hasta que se destilde esta casilla — útil si todavía falta que el operador corte y complete m²/duración.
+            </p>
+          )}
+
           <button type="submit" disabled={enviando} className="w-full mt-2 bg-ink text-paper py-2.5 rounded-sm text-sm font-medium hover:bg-[#333731] disabled:opacity-60">
-            {enviando ? "Guardando..." : "Registrar trabajo"}
+            {enviando ? "Guardando..." : editingId ? "Guardar cambios" : "Registrar trabajo"}
           </button>
         </form>
 
         <div className="w-full">
           <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
             <h2 className="font-display text-xl font-semibold text-ink">Historial de trabajos</h2>
-            <div className="flex gap-1">
-              {["Todos", ...TIPOS].map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setFiltroTipo(t)}
-                  className="px-3 py-1.5 rounded-sm text-xs font-medium border transition-colors"
-                  style={{
-                    backgroundColor: filtroTipo === t ? "#4A4B4D" : "white",
-                    color: filtroTipo === t ? "white" : "#4A463D",
-                    borderColor: filtroTipo === t ? "transparent" : "#D8D2C4",
-                  }}
-                >
-                  {t}
-                </button>
-              ))}
+            <div className="flex gap-3 flex-wrap">
+              <div className="flex gap-1">
+                {["Todos", "Pendientes", "Confirmados"].map((e) => (
+                  <button
+                    key={e}
+                    onClick={() => setFiltroEstado(e)}
+                    className="px-3 py-1.5 rounded-sm text-xs font-medium border transition-colors"
+                    style={{
+                      backgroundColor: filtroEstado === e ? "#4A4B4D" : "white",
+                      color: filtroEstado === e ? "white" : "#4A463D",
+                      borderColor: filtroEstado === e ? "transparent" : "#D8D2C4",
+                    }}
+                  >
+                    {e}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-1">
+                {["Todos", ...TIPOS].map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setFiltroTipo(t)}
+                    className="px-3 py-1.5 rounded-sm text-xs font-medium border transition-colors"
+                    style={{
+                      backgroundColor: filtroTipo === t ? "#4A4B4D" : "white",
+                      color: filtroTipo === t ? "white" : "#4A463D",
+                      borderColor: filtroTipo === t ? "transparent" : "#D8D2C4",
+                    }}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
           <div className="bg-white border border-line rounded-sm overflow-x-auto w-full">
-            <table className="w-full text-sm min-w-[860px]">
+            <table className="w-full text-sm min-w-[960px]">
               <thead>
                 <tr className="text-left text-xs uppercase text-[#6B6558] border-b border-line">
                   <th className="px-4 py-3 font-medium">Fecha</th>
                   <th className="px-4 py-3 font-medium">Tipo</th>
+                  <th className="px-4 py-3 font-medium">Estado</th>
                   <th className="px-4 py-3 font-medium">Cliente</th>
                   <th className="px-4 py-3 font-medium">Descripción</th>
                   <th className="px-4 py-3 font-medium">Cant.</th>
                   <th className="px-4 py-3 font-medium">Duración</th>
                   <th className="px-4 py-3 font-medium">m²</th>
-                  <th className="px-4 py-3 font-medium">Material</th>
-                  <th className="px-4 py-3 font-medium text-right">PDF</th>
+                  <th className="px-4 py-3 font-medium">Archivo</th>
+                  <th className="px-4 py-3 font-medium text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody>
-                {loading && <tr><td colSpan={9} className="px-4 py-8 text-center text-sm text-[#8A8578]">Cargando...</td></tr>}
+                {loading && <tr><td colSpan={10} className="px-4 py-8 text-center text-sm text-[#8A8578]">Cargando...</td></tr>}
                 {!loading && trabajosFiltrados.map((t, idx) => (
                   <tr key={t.id} className={`${idx % 2 === 1 ? "bg-[#F7F4EC]" : ""} ${idx !== trabajosFiltrados.length - 1 ? "border-b border-[#EFEBE0]" : ""}`}>
                     <td className="px-4 py-3 text-[#6B6558] font-mono whitespace-nowrap">{new Date(t.fecha).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}</td>
@@ -275,6 +407,14 @@ export default function TrabajosPage() {
                         {t.tipo}
                       </span>
                     </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className="inline-block text-xs font-medium px-2 py-0.5 rounded-sm whitespace-nowrap"
+                        style={{ backgroundColor: t.confirmado ? "#EAF0E4" : "#FBEFE6", color: t.confirmado ? "#3D5A2E" : "#B25A1E" }}
+                      >
+                        {t.confirmado ? "Confirmado" : "Pendiente"}
+                      </span>
+                    </td>
                     <td className="px-4 py-3 text-[#4A463D] whitespace-nowrap">{t.cliente || "—"}</td>
                     <td className="px-4 py-3 text-[#4A463D]">{t.descripcion || "—"}</td>
                     <td className="px-4 py-3 font-mono">{t.cantidad ?? "—"}</td>
@@ -284,16 +424,27 @@ export default function TrabajosPage() {
                         : (t.duracion_horas != null ? `${t.duracion_horas} h` : "—")}
                     </td>
                     <td className="px-4 py-3 font-mono whitespace-nowrap">{t.metros_cuadrados != null ? `${Number(t.metros_cuadrados).toFixed(3)} m²` : "—"}</td>
-                    <td className="px-4 py-3 text-[#8A8578]">{t.material || "—"}</td>
-                    <td className="px-4 py-3 text-right">
-                      <button onClick={() => imprimirTarjeta(t)} className="text-[#4A4B4D] hover:opacity-70" title="Descargar tarjeta PDF">
-                        <Printer size={16} />
-                      </button>
+                    <td className="px-4 py-3">
+                      {t.archivo_dxf ? (
+                        <a href={t.archivo_dxf.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-[#3B5166] hover:underline">
+                          <FileText size={13} /> Descargar
+                        </a>
+                      ) : "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-3">
+                        <button onClick={() => abrirEditar(t)} className="text-[#4A4B4D] hover:opacity-70" title="Editar / Completar">
+                          <Pencil size={15} />
+                        </button>
+                        <button onClick={() => imprimirTarjeta(t)} className="text-[#4A4B4D] hover:opacity-70" title="Descargar tarjeta PDF">
+                          <Printer size={15} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
                 {!loading && trabajosFiltrados.length === 0 && (
-                  <tr><td colSpan={9} className="px-4 py-8 text-center text-sm text-[#8A8578]">Sin trabajos {filtroTipo !== "Todos" ? `de ${filtroTipo}` : "registrados"}</td></tr>
+                  <tr><td colSpan={10} className="px-4 py-8 text-center text-sm text-[#8A8578]">Sin trabajos para este filtro</td></tr>
                 )}
               </tbody>
             </table>
@@ -310,6 +461,7 @@ export default function TrabajosPage() {
           <table className="pc-tabla">
             <tbody>
               <tr><td className="pc-label">Fecha</td><td>{new Date(tarjeta.fecha).toLocaleString("es-MX", { dateStyle: "long", timeStyle: "short" })}</td></tr>
+              <tr><td className="pc-label">Estado</td><td>{tarjeta.confirmado ? "Confirmado" : "Pendiente"}</td></tr>
               <tr><td className="pc-label">Cliente</td><td>{tarjeta.cliente || "—"}</td></tr>
               <tr><td className="pc-label">Descripción</td><td>{tarjeta.descripcion || "—"}</td></tr>
               <tr><td className="pc-label">Cantidad</td><td>{tarjeta.cantidad ?? "—"}</td></tr>
