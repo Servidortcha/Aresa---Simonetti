@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
+import * as XLSX from "xlsx";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -32,6 +33,8 @@ export default function EmpleadosPage() {
   const [saving, setSaving] = useState(false);
   const [mostrarInactivos, setMostrarInactivos] = useState(false);
   const [error, setError] = useState("");
+  const [importando, setImportando] = useState(false);
+  const [resultadoImport, setResultadoImport] = useState(null);
 
   useEffect(() => {
     cargarEmpleados();
@@ -157,11 +160,145 @@ export default function EmpleadosPage() {
     }
   }
 
+  function excelDateToISO(valor) {
+    // Si ya viene como texto tipo "2026-01-01" lo dejamos así
+    if (typeof valor === "string") {
+      const t = valor.trim();
+      return t === "" ? null : t;
+    }
+    // Si viene como número de serie de Excel, lo convertimos a fecha
+    if (typeof valor === "number") {
+      const fecha = XLSX.SSF.parse_date_code(valor);
+      if (!fecha) return null;
+      const mm = String(fecha.m).padStart(2, "0");
+      const dd = String(fecha.d).padStart(2, "0");
+      return `${fecha.y}-${mm}-${dd}`;
+    }
+    return null;
+  }
+
+  async function handleImportarExcel(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImportando(true);
+    setResultadoImport(null);
+    setError("");
+
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "array" });
+      const hoja = workbook.Sheets[workbook.SheetNames[0]];
+      const filas = XLSX.utils.sheet_to_json(hoja, { defval: "" });
+
+      const validas = [];
+      const errores = [];
+
+      filas.forEach((fila, idx) => {
+        const numeroFila = idx + 2; // fila 1 es el encabezado
+        const legajo = String(fila.legajo_nro || "").trim();
+        const apellido = String(fila.apellido || "").trim();
+        const nombre = String(fila.nombre || "").trim();
+        const sueldo = fila.sueldo_basico;
+
+        if (!legajo || !apellido || !nombre) {
+          errores.push(`Fila ${numeroFila}: falta legajo_nro, apellido o nombre — se omitió`);
+          return;
+        }
+        if (sueldo === "" || isNaN(Number(sueldo))) {
+          errores.push(`Fila ${numeroFila}: sueldo_basico inválido — se omitió`);
+          return;
+        }
+
+        validas.push({
+          legajo_nro: legajo,
+          apellido,
+          nombre,
+          domicilio: String(fila.domicilio || "").trim() || null,
+          localidad: String(fila.localidad || "").trim() || null,
+          cuil: String(fila.cuil || "").trim() || null,
+          fecha_ingreso: excelDateToISO(fila.fecha_ingreso),
+          fecha_antiguedad: excelDateToISO(fila.fecha_antiguedad),
+          categoria: String(fila.categoria || "").trim() || null,
+          tipo_contrato: String(fila.tipo_contrato || "").trim() || "Pers. Construcción",
+          sueldo_basico: Number(sueldo),
+          banco: String(fila.banco || "").trim() || null,
+          lugar_pago: String(fila.lugar_pago || "").trim() || null,
+        });
+      });
+
+      if (validas.length === 0) {
+        setResultadoImport({
+          ok: 0,
+          errores: errores.length ? errores : ["No se encontró ninguna fila válida en la planilla."],
+        });
+        setImportando(false);
+        e.target.value = "";
+        return;
+      }
+
+      const { data, error: insertError } = await supabase
+        .from("empleados")
+        .insert(validas)
+        .select();
+
+      if (insertError) {
+        setError("Error al importar: " + insertError.message);
+        setResultadoImport({ ok: 0, errores });
+      } else {
+        setResultadoImport({ ok: data.length, errores });
+        await cargarEmpleados();
+      }
+    } catch (err) {
+      setError("No se pudo leer el archivo. Verificá que sea un .xlsx válido.");
+    }
+
+    setImportando(false);
+    e.target.value = ""; // permite volver a subir el mismo archivo si hace falta
+  }
+
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6" style={{ fontFamily: "Space Grotesk, sans-serif", color: "#163A5F" }}>
-        Empleados
-      </h1>
+      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+        <h1 className="text-2xl font-bold" style={{ fontFamily: "Space Grotesk, sans-serif", color: "#163A5F" }}>
+          Empleados
+        </h1>
+
+        <label
+          className="px-4 py-2 rounded text-white font-medium text-sm cursor-pointer inline-block"
+          style={{ backgroundColor: importando ? "#8FA0AC" : "#163A5F" }}
+        >
+          {importando ? "Importando..." : "Importar desde Excel"}
+          <input
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={handleImportarExcel}
+            disabled={importando}
+            className="hidden"
+          />
+        </label>
+      </div>
+
+      {resultadoImport && (
+        <div className="bg-blue-50 border border-blue-300 text-blue-900 px-4 py-3 rounded mb-4 text-sm">
+          <p className="font-medium">
+            Se importaron {resultadoImport.ok} empleado{resultadoImport.ok === 1 ? "" : "s"} correctamente.
+          </p>
+          {resultadoImport.errores.length > 0 && (
+            <ul className="mt-2 list-disc list-inside text-blue-800">
+              {resultadoImport.errores.map((e, i) => (
+                <li key={i}>{e}</li>
+              ))}
+            </ul>
+          )}
+          <button
+            onClick={() => setResultadoImport(null)}
+            className="mt-2 underline text-blue-700"
+          >
+            Cerrar
+          </button>
+        </div>
+      )}
 
       {error && (
         <div className="bg-red-50 border border-red-300 text-red-700 px-4 py-2 rounded mb-4">
