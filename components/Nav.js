@@ -14,8 +14,9 @@ const TABS = [
   { href: "/trabajos", label: "Trabajos" },
   { href: "/taller", label: "Taller", adminOnly: true },
   { href: "/nesting", label: "Nesting" },
+  { href: "/rrhh/empleados", label: "Empleados" },
+  { href: "/rrhh/conceptos", label: "Conceptos" },
 ];
-
 function AresaMark() {
   return (
     <svg width="12" height="12" viewBox="0 0 72 72" xmlns="http://www.w3.org/2000/svg">
