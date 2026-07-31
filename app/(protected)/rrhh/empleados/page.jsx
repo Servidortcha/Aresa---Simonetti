@@ -138,8 +138,8 @@ export default function ConceptosPage() {
   async function handleArchivar(c) {
     const nuevoEstado = !c.activo;
     const confirmMsg = nuevoEstado
-      ? ¿Reactivar "${c.nombre}"?
-      : ¿Archivar "${c.nombre}"? Ya no va a aparecer al liquidar.;
+      ? `¿Reactivar "${c.nombre}"?`
+      : `¿Archivar "${c.nombre}"? Ya no va a aparecer al liquidar.`;
     if (!window.confirm(confirmMsg)) return;
 
     const { error } = await supabase
@@ -285,7 +285,7 @@ export default function ConceptosPage() {
                   <td className="p-2">{c.nombre}</td>
                   <td className="p-2">{TIPO_LABEL[c.tipo]}</td>
                   <td className="p-2">{MODO_LABEL[c.modo_calculo]}</td>
-                  <td className="p-2">{c.porcentaje ? ${c.porcentaje}% : "-"}</td>
+                  <td className="p-2">{c.porcentaje ? `${c.porcentaje}%` : "-"}</td>
                   <td className="p-2">
                     {c.activo ? (
                       <span className="text-green-700">Activo</span>
