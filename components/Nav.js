@@ -16,6 +16,7 @@ const TABS = [
   { href: "/nesting", label: "Nesting" },
   { href: "/rrhh/empleados", label: "Empleados" },
   { href: "/rrhh/conceptos", label: "Conceptos" },
+  { href: "/rrhh/liquidacion", label: "Liquidación" },
 ];
 function AresaMark() {
   return (
