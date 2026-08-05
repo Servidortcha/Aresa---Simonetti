@@ -7,16 +7,17 @@ import { LogOut, Menu, X } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 
 const TABS = [
-  { href: "/ingreso-egreso", label: "Ingreso / Egreso" },
-  { href: "/stock", label: "Stock" },
-  { href: "/movimientos", label: "Movimientos" },
-  { href: "/stock-panol", label: "Stock Pañol", adminOnly: true },
-  { href: "/trabajos", label: "Trabajos" },
-  { href: "/taller", label: "Taller", adminOnly: true },
-  { href: "/nesting", label: "Nesting" },
-  { href: "/rrhh/empleados", label: "Empleados" },
-  { href: "/rrhh/conceptos", label: "Conceptos" },
-  { href: "/rrhh/liquidacion", label: "Liquidación" },
+  { href: "/ingreso-egreso", label: "Ingreso / Egreso", roles: ["admin", "taller_stock", "operario"] },
+  { href: "/stock", label: "Stock", roles: ["admin", "taller_stock"] },
+  { href: "/movimientos", label: "Movimientos", roles: ["admin"] },
+  { href: "/stock-panol", label: "Stock Pañol", roles: ["admin"] },
+  { href: "/trabajos", label: "Trabajos", roles: ["admin", "taller_stock"] },
+  { href: "/taller", label: "Taller", roles: ["admin"] },
+  { href: "/nesting", label: "Nesting", roles: ["admin", "taller_stock"] },
+  { href: "/inglete", label: "Inglete", roles: ["admin", "taller_stock", "operario"] },
+  { href: "/rrhh/empleados", label: "Empleados", roles: ["admin"] },
+  { href: "/rrhh/conceptos", label: "Conceptos", roles: ["admin"] },
+  { href: "/rrhh/liquidacion", label: "Liquidación", roles: ["admin"] },
 ];
 function AresaMark() {
   return (
@@ -34,12 +35,7 @@ export default function Nav({ userEmail, rol }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
 
-  const tabs =
-    rol === "admin"
-      ? TABS
-      : rol === "taller_stock"
-      ? TABS.filter((t) => t.href === "/ingreso-egreso" || t.href === "/stock" || t.href === "/trabajos" || t.href === "/nesting")
-      : TABS.filter((t) => t.href === "/ingreso-egreso");
+  const tabs = TABS.filter((t) => t.roles.includes(rol));
 
   async function handleLogout() {
     await supabase.auth.signOut();
