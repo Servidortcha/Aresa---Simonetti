@@ -1,12 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+import { supabase } from "../../../../lib/supabaseClient";
+import AdminGuard from "../../../../components/AdminGuard";
 
 // Datos fijos de la empresa (encabezado del recibo)
 const EMPRESA = {
@@ -84,7 +80,25 @@ function formatearMoneda(n) {
   return Number(n || 0).toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  })[c]);
+}
+
 export default function LiquidacionPage() {
+  return (
+    <AdminGuard>
+      <LiquidacionPageInner />
+    </AdminGuard>
+  );
+}
+
+function LiquidacionPageInner() {
   const [empleados, setEmpleados] = useState([]);
   const [empleadoId, setEmpleadoId] = useState("");
   const [tipo, setTipo] = useState("quincena1");
@@ -260,8 +274,8 @@ export default function LiquidacionPage() {
         const desc = f.tipo === "descuento" ? formatearMoneda(f.monto) : "";
         return `<tr>
           <td></td>
-          <td>${f.concepto_nombre}</td>
-          <td style="text-align:right">${f.cantidad !== "" && f.cantidad !== null ? f.cantidad : ""}</td>
+          <td>${esc(f.concepto_nombre)}</td>
+          <td style="text-align:right">${f.cantidad !== "" && f.cantidad !== null ? esc(f.cantidad) : ""}</td>
           <td style="text-align:right">${habConDesc}</td>
           <td style="text-align:right">${habSinDesc}</td>
           <td style="text-align:right">${desc}</td>
@@ -272,7 +286,7 @@ export default function LiquidacionPage() {
     const html = `
     <html>
     <head>
-      <title>Recibo - ${empleadoActual.apellido}, ${empleadoActual.nombre}</title>
+      <title>Recibo - ${esc(empleadoActual.apellido)}, ${esc(empleadoActual.nombre)}</title>
       <style>
         body { font-family: Arial, sans-serif; font-size: 12px; padding: 20px; }
         table { width: 100%; border-collapse: collapse; }
@@ -294,18 +308,18 @@ export default function LiquidacionPage() {
       </table>
       <table style="margin-top:10px">
         <tr>
-          <td><b>Legajo N°</b><br>${empleadoActual.legajo_nro}</td>
-          <td><b>Apellido y Nombre</b><br>${empleadoActual.apellido}, ${empleadoActual.nombre}</td>
-          <td><b>Mes Liquidado</b><br>${mesLiquidadoTexto}</td>
+          <td><b>Legajo N°</b><br>${esc(empleadoActual.legajo_nro)}</td>
+          <td><b>Apellido y Nombre</b><br>${esc(empleadoActual.apellido)}, ${esc(empleadoActual.nombre)}</td>
+          <td><b>Mes Liquidado</b><br>${esc(mesLiquidadoTexto)}</td>
         </tr>
         <tr>
-          <td><b>C.U.I.L.</b><br>${empleadoActual.cuil || ""}</td>
-          <td><b>Categoría</b><br>${empleadoActual.categoria || ""}</td>
+          <td><b>C.U.I.L.</b><br>${esc(empleadoActual.cuil || "")}</td>
+          <td><b>Categoría</b><br>${esc(empleadoActual.categoria || "")}</td>
           <td><b>Sueldo Básico</b><br>${formatearMoneda(empleadoActual.sueldo_basico)}</td>
         </tr>
         <tr>
-          <td colspan="2"><b>Domicilio / Localidad</b><br>${empleadoActual.domicilio || ""} - ${empleadoActual.localidad || ""}</td>
-          <td><b>Banco</b><br>${empleadoActual.banco || ""}</td>
+          <td colspan="2"><b>Domicilio / Localidad</b><br>${esc(empleadoActual.domicilio || "")} - ${esc(empleadoActual.localidad || "")}</td>
+          <td><b>Banco</b><br>${esc(empleadoActual.banco || "")}</td>
         </tr>
       </table>
       <table style="margin-top:10px">

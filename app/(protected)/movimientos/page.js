@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
 import { useAuth } from "../../../lib/AuthContext";
-import * as XLSX from "xlsx";
 import { History, ArrowDownCircle, ArrowUpCircle, Download } from "lucide-react";
 
 export default function MovimientosPage() {
@@ -31,7 +30,8 @@ export default function MovimientosPage() {
     if (rol && rol !== "admin") router.replace("/ingreso-egreso");
   }, [rol, router]);
 
-  function exportarExcel() {
+  async function exportarExcel() {
+    const XLSX = await import("xlsx");
     const filas = movimientos.map((m) => ({
       Fecha: new Date(m.fecha).toLocaleString("es-MX"),
       Insumo: m.insumos?.nombre,

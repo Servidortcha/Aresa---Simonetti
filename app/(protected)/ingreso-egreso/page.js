@@ -93,32 +93,25 @@ export default function IngresoEgresoPage() {
 
     setEnviando(true);
 
-    // 1. Calcular cómo queda el stock con este movimiento
-    const nuevoStock = form.tipo === "entrada" ? insumo.stock + cant : insumo.stock - cant;
-
-    // 2. Registrar el movimiento (fecha y hora quedan automáticas por default de la base de datos)
-    const { error: movError } = await supabase.from("movimientos").insert({
-      insumo_id: insumo.id,
-      tipo: form.tipo,
-      cantidad: cant,
-      producto_texto: form.tipo === "salida" ? form.producto || null : null,
-      nota: form.nota || null,
-      usuario_email: session?.user?.email || null,
-      stock_resultante: nuevoStock,
+    // El RPC registra el movimiento y actualiza el stock en una sola
+    // transacción en el servidor (valida stock y roles).
+    const { data, error } = await supabase.rpc("registrar_movimiento_insumo", {
+      p_insumo_id: insumo.id,
+      p_tipo: form.tipo,
+      p_cantidad: cant,
+      p_producto_texto: form.tipo === "salida" ? form.producto || null : null,
+      p_nota: form.nota || null,
+      p_usuario_email: session?.user?.email || null,
     });
-    if (movError) {
-      setError(movError.message);
+
+    const resultado = data?.[0];
+    if (error || !resultado?.ok) {
+      setError(error?.message || resultado?.mensaje || "No se pudo registrar el movimiento.");
       setEnviando(false);
       return;
     }
 
-    // 3. Actualizar el stock del insumo
-    const { error: stockError } = await supabase.from("insumos").update({ stock: nuevoStock }).eq("id", insumo.id);
-    if (stockError) {
-      setError(stockError.message);
-      setEnviando(false);
-      return;
-    }
+    const nuevoStock = resultado.nuevo_stock;
 
     setInsumos((prev) => prev.map((i) => (i.id === insumo.id ? { ...i, stock: nuevoStock } : i)));
     setConfirmacion(`${form.tipo === "entrada" ? "Entrada" : "Salida"} de ${cant} ${insumo.unidad} registrada para ${insumo.nombre}`);

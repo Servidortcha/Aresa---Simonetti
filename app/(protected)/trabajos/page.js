@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import * as XLSX from "xlsx";
 import { supabase } from "../../../lib/supabaseClient";
 import { useAuth } from "../../../lib/AuthContext";
 import { Wrench, Download, Printer, Paperclip, Pencil, FileText, X } from "lucide-react";
@@ -189,7 +188,8 @@ export default function TrabajosPage() {
     setTimeout(() => window.print(), 100);
   }
 
-  function exportarExcel() {
+  async function exportarExcel() {
+    const XLSX = await import("xlsx");
     const filas = trabajosFiltrados.map((t) => ({
       Fecha: new Date(t.fecha).toLocaleString("es-MX"),
       Tipo: t.tipo,

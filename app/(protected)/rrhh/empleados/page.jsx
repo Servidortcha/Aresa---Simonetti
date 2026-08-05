@@ -1,13 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { createClient } from "@supabase/supabase-js";
-import * as XLSX from "xlsx";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+import { supabase } from "../../../../lib/supabaseClient";
+import AdminGuard from "../../../../components/AdminGuard";
 
 const emptyForm = {
   legajo_nro: "",
@@ -25,7 +20,7 @@ const emptyForm = {
   lugar_pago: "",
 };
 
-export default function EmpleadosPage() {
+function EmpleadosPageInner() {
   const [empleados, setEmpleados] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [editId, setEditId] = useState(null);
@@ -160,7 +155,7 @@ export default function EmpleadosPage() {
     }
   }
 
-  function excelDateToISO(valor) {
+  function excelDateToISO(XLSX, valor) {
     // Si ya viene como texto tipo "2026-01-01" lo dejamos así
     if (typeof valor === "string") {
       const t = valor.trim();
@@ -187,6 +182,7 @@ export default function EmpleadosPage() {
 
     try {
       const buffer = await file.arrayBuffer();
+      const XLSX = await import("xlsx");
       const workbook = XLSX.read(buffer, { type: "array" });
       const hoja = workbook.Sheets[workbook.SheetNames[0]];
       const filas = XLSX.utils.sheet_to_json(hoja, { defval: "" });
@@ -217,8 +213,8 @@ export default function EmpleadosPage() {
           domicilio: String(fila.domicilio || "").trim() || null,
           localidad: String(fila.localidad || "").trim() || null,
           cuil: String(fila.cuil || "").trim() || null,
-          fecha_ingreso: excelDateToISO(fila.fecha_ingreso),
-          fecha_antiguedad: excelDateToISO(fila.fecha_antiguedad),
+          fecha_ingreso: excelDateToISO(XLSX, fila.fecha_ingreso),
+          fecha_antiguedad: excelDateToISO(XLSX, fila.fecha_antiguedad),
           categoria: String(fila.categoria || "").trim() || null,
           tipo_contrato: String(fila.tipo_contrato || "").trim() || "Pers. Construcción",
           sueldo_basico: Number(sueldo),
@@ -440,6 +436,14 @@ export default function EmpleadosPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function EmpleadosPage() {
+  return (
+    <AdminGuard>
+      <EmpleadosPageInner />
+    </AdminGuard>
   );
 }
 

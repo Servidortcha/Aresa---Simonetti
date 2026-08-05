@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import * as XLSX from "xlsx";
 import { supabase } from "../../../lib/supabaseClient";
 import { useAuth } from "../../../lib/AuthContext";
 import { Hammer, Download, Paperclip, X, FileText } from "lucide-react";
@@ -105,7 +104,8 @@ export default function TallerPage() {
     cargar();
   }
 
-  function exportarExcel() {
+  async function exportarExcel() {
+    const XLSX = await import("xlsx");
     const filas = registros.map((r) => ({
       Fecha: new Date(r.fecha).toLocaleString("es-MX"),
       Cliente: r.cliente || "",

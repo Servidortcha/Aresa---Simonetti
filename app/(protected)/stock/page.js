@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
 import { useAuth } from "../../../lib/AuthContext";
-import * as XLSX from "xlsx";
 import { AlertTriangle, Search, Plus, X, Pencil, Trash2, Download } from "lucide-react";
 
 const CATS = ["Químicos", "Empaques", "Metales", "Textiles", "Seguridad", "Insumos para Fabricación"];
@@ -80,7 +79,8 @@ export default function StockPage() {
   );
   const lowCount = insumos.filter((i) => i.activo !== false && i.stock < i.minimo).length;
 
-  function exportarExcel() {
+  async function exportarExcel() {
+    const XLSX = await import("xlsx");
     const filas = filtered.map((i) => ({
       Insumo: i.nombre,
       Categoría: i.categoria,

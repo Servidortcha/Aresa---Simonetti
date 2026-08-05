@@ -1,12 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+import { supabase } from "../../../../lib/supabaseClient";
+import AdminGuard from "../../../../components/AdminGuard";
 
 const emptyForm = {
   codigo: "",
@@ -30,6 +26,14 @@ const MODO_LABEL = {
 };
 
 export default function ConceptosPage() {
+  return (
+    <AdminGuard>
+      <ConceptosPageInner />
+    </AdminGuard>
+  );
+}
+
+function ConceptosPageInner() {
   const [conceptos, setConceptos] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [editId, setEditId] = useState(null);
