@@ -8,6 +8,10 @@ import { supabase } from "../lib/supabaseClient";
 
 const GROUPS = [
   {
+    label: "General",
+    items: [{ href: "/panel", label: "Panel", roles: ["admin"] }],
+  },
+  {
     label: "Movimiento",
     items: [
       { href: "/ingreso-egreso", label: "Ingreso / Egreso", roles: ["admin", "taller_stock", "operario"] },

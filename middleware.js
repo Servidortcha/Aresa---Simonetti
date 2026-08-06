@@ -4,6 +4,7 @@ import { createServerClient } from "@supabase/ssr";
 const COOKIE_MARKER = "-auth-token";
 
 function requiredRoles(pathname) {
+  if (/^\/panel(\/|$)/.test(pathname)) return ["admin"];
   if (/^\/rrhh(\/|$)/.test(pathname)) return ["admin"];
   if (/^\/stock-panol(\/|$)/.test(pathname)) return ["admin"];
   if (/^\/taller(\/|$)/.test(pathname)) return ["admin"];
