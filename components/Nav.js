@@ -13,6 +13,7 @@ const TABS = [
   { href: "/stock-panol", label: "Stock Pañol", roles: ["admin"] },
   { href: "/trabajos", label: "Trabajos", roles: ["admin", "taller_stock"] },
   { href: "/taller", label: "Taller", roles: ["admin"] },
+  { href: "/organigrama", label: "Organigrama", roles: ["admin"] },
   { href: "/nesting", label: "Nesting", roles: ["admin", "taller_stock"] },
   { href: "/inglete", label: "Inglete", roles: ["admin", "taller_stock", "operario"] },
   { href: "/rrhh/empleados", label: "Empleados", roles: ["admin"] },

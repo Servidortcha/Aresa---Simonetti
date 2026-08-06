@@ -7,6 +7,7 @@ function requiredRole(pathname) {
   if (/^\/rrhh(\/|$)/.test(pathname)) return "admin";
   if (/^\/stock-panol(\/|$)/.test(pathname)) return "admin";
   if (/^\/taller(\/|$)/.test(pathname)) return "admin";
+  if (/^\/organigrama(\/|$)/.test(pathname)) return "admin";
   if (/^\/stock(\/|$)/.test(pathname)) return "taller_stock";
   if (/^\/trabajos(\/|$)/.test(pathname)) return "taller_stock";
   if (/^\/nesting(\/|$)/.test(pathname)) return "taller_stock";
