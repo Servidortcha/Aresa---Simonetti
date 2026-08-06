@@ -65,7 +65,63 @@ export default function MovimientosPage() {
 
       {error && <p className="text-sm text-red mb-4">Error: {error}</p>}
 
-      <div className="bg-white border border-line rounded-sm overflow-x-auto">
+      {/* Móvil: tarjetas */}
+      <div className="sm:hidden space-y-3">
+        {loading && <p className="text-center text-sm text-[#8A8578] py-8">Cargando...</p>}
+        {!loading &&
+          movimientos.map((m) => (
+            <div key={m.id} className="bg-white border border-line rounded-sm p-4">
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <span className="font-medium leading-snug">{m.insumos?.nombre || "—"}</span>
+                <span
+                  className="inline-flex items-center gap-1 text-xs font-medium shrink-0"
+                  style={{ color: m.tipo === "entrada" ? "#4B7355" : "#C7522A" }}
+                >
+                  {m.tipo === "entrada" ? <ArrowDownCircle size={14} /> : <ArrowUpCircle size={14} />}
+                  {m.tipo === "entrada" ? "Entrada" : "Salida"}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-sm">
+                <div>
+                  <span className="block text-[10px] uppercase tracking-wide text-[#8A8578]">Fecha</span>
+                  <span className="font-mono text-[#6B6558]">{new Date(m.fecha).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] uppercase tracking-wide text-[#8A8578]">Cantidad</span>
+                  <span className="font-mono">{m.cantidad} {m.insumos?.unidad}</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] uppercase tracking-wide text-[#8A8578]">Stock resultante</span>
+                  <span className="font-mono text-[#6B6558]">{m.stock_resultante ?? "—"} {m.stock_resultante != null ? m.insumos?.unidad : ""}</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] uppercase tracking-wide text-[#8A8578]">Usuario</span>
+                  <span className="text-[#8A8578] text-xs">{m.usuario_email?.replace("@simonetti.local", "") || "—"}</span>
+                </div>
+              </div>
+              {(m.producto_texto || m.nota) && (
+                <div className="mt-2 pt-2 border-t border-[#EFEBE0] text-sm space-y-1">
+                  {m.producto_texto && (
+                    <div>
+                      <span className="text-[10px] uppercase tracking-wide text-[#8A8578] mr-1.5">Usado en</span>
+                      <span className="text-[#4A463D]">{m.producto_texto}</span>
+                    </div>
+                  )}
+                  {m.nota && (
+                    <div>
+                      <span className="text-[10px] uppercase tracking-wide text-[#8A8578] mr-1.5">Nota</span>
+                      <span className="text-[#8A8578]">{m.nota}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        {!loading && movimientos.length === 0 && <p className="text-center text-sm text-[#8A8578] py-8">Aún no hay movimientos registrados</p>}
+      </div>
+
+      {/* Desktop: tabla */}
+      <div className="hidden sm:block bg-white border border-line rounded-sm overflow-x-auto">
         <table className="w-full text-sm min-w-[900px]">
           <thead>
             <tr className="text-left text-xs uppercase text-[#6B6558] border-b border-line">

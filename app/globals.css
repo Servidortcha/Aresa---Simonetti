@@ -69,6 +69,19 @@ body {
   text-align: center;
 }
 
+/* === Móvil === */
+@media (max-width: 767px) {
+  /* Evita el zoom automático de iOS al enfocar inputs pequeños */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+}
+
 @media print {
   body * {
     visibility: hidden;

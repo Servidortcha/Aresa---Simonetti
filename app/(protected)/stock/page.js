@@ -191,7 +191,7 @@ export default function StockPage() {
       {error && <p className="text-sm text-red mb-4">Error: {error}</p>}
 
       <div className="flex items-center gap-3 mb-4 flex-wrap">
-        <div className="flex items-center gap-2 bg-white border border-line rounded-sm px-3 py-2 max-w-xs">
+        <div className="flex items-center gap-2 bg-white border border-line rounded-sm px-3 py-2 w-full sm:max-w-xs">
           <Search size={15} color="#6B6558" />
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar insumo o categoría" className="flex-1 text-sm outline-none" />
         </div>
@@ -207,7 +207,45 @@ export default function StockPage() {
         </button>
       </div>
 
-      <div className="bg-white border border-line rounded-sm overflow-x-auto">
+      {/* Móvil: tarjetas */}
+      <div className="sm:hidden space-y-3">
+        {loading && <p className="text-center text-sm text-[#8A8578] py-8">Cargando...</p>}
+        {!loading &&
+          filtered.map((i) => (
+            <div key={i.id} className="bg-white border border-line rounded-sm p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="font-medium leading-snug">{i.nombre}</div>
+                  <div className="text-xs text-[#6B6558] mt-0.5">{i.categoria}</div>
+                </div>
+                {!soloLectura && (
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button onClick={() => openEditar(i)} className="p-2.5 border border-line rounded-sm text-[#4A4B4D]" title="Editar" aria-label={`Editar ${i.nombre}`}>
+                      <Pencil size={16} />
+                    </button>
+                    {verArchivados ? (
+                      <button onClick={() => reactivar(i)} className="px-3 py-2.5 border border-line rounded-sm text-green text-xs font-medium">Reactivar</button>
+                    ) : (
+                      <button onClick={() => setArchiving(i)} className="p-2.5 border border-line rounded-sm text-red" title="Archivar" aria-label={`Archivar ${i.nombre}`}>
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center justify-between mt-3 gap-3">
+                <div className="font-mono text-base">
+                  {i.stock} <span className="text-[#B0AA9A]">/ {i.minimo}</span> <span className="text-[#8A8578] text-xs">{i.unidad}</span>
+                </div>
+                <StockGauge stock={i.stock} minimo={i.minimo} />
+              </div>
+            </div>
+          ))}
+        {!loading && filtered.length === 0 && <p className="text-center text-sm text-[#8A8578] py-8">Sin resultados</p>}
+      </div>
+
+      {/* Desktop: tabla */}
+      <div className="hidden sm:block bg-white border border-line rounded-sm overflow-x-auto">
         <table className="w-full text-sm min-w-[640px]">
           <thead>
             <tr className="text-left text-xs uppercase text-[#6B6558] border-b border-line">

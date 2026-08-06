@@ -55,6 +55,8 @@ const CSS = `
 .inglete-tool .paper{background:var(--paper);border-radius:4px;padding:16px 16px 8px;color:var(--ink);}
 .inglete-tool svg text{font-family:"SF Mono","Consolas","Menlo",monospace;}
 .inglete-tool table.mtable{width:100%;border-collapse:collapse;margin-top:20px;font-family:"SF Mono","Consolas","Menlo",monospace;font-size:12.5px;}
+.inglete-tool .mtable-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.inglete-tool table.mtable{min-width:540px;}
 .inglete-tool table.mtable th{text-align:left;color:#9FB4C4;font-weight:600;letter-spacing:0.5px;text-transform:uppercase;font-size:10.5px;padding:8px 10px;border-bottom:1px solid var(--blue-line);}
 .inglete-tool table.mtable td{padding:7px 10px;border-bottom:1px solid rgba(46,88,119,0.35);}
 .inglete-tool table.mtable tr.toe td{color:var(--amber);}
@@ -370,24 +372,26 @@ export default function IngletePage() {
             </div>
           </div>
 
-          <table className="mtable">
-            <thead>
-              <tr>
-                <th>Ángulo</th>
-                <th>Posición en circunferencia</th>
-                <th>Altura desde la base</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tableRows.map((r) => (
-                <tr key={r.key} className={`${r.toe ? "toe" : ""}${r.heel ? " heel" : ""}`}>
-                  <td>{r.deg}°</td>
-                  <td>{r.x.toFixed(1)} mm</td>
-                  <td>{r.h.toFixed(1)} mm</td>
+          <div className="mtable-wrap">
+            <table className="mtable">
+              <thead>
+                <tr>
+                  <th>Ángulo</th>
+                  <th>Posición en circunferencia</th>
+                  <th>Altura desde la base</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {tableRows.map((r) => (
+                  <tr key={r.key} className={`${r.toe ? "toe" : ""}${r.heel ? " heel" : ""}`}>
+                    <td>{r.deg}°</td>
+                    <td>{r.x.toFixed(1)} mm</td>
+                    <td>{r.h.toFixed(1)} mm</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
