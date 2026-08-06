@@ -375,7 +375,73 @@ export default function TrabajosPage() {
             </div>
           </div>
 
-          <div className="bg-white border border-line rounded-sm overflow-x-auto w-full">
+          {/* Móvil: tarjetas */}
+          <div className="sm:hidden space-y-3">
+            {loading && <p className="text-center text-sm text-[#8A8578] py-8">Cargando...</p>}
+            {!loading &&
+              trabajosFiltrados.map((t) => (
+                <div key={t.id} className="bg-white border border-line rounded-sm p-4">
+                  <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                    <span
+                      className="inline-block text-xs font-medium px-2 py-0.5 rounded-sm"
+                      style={{ backgroundColor: t.tipo === "Corte Láser" ? "#EAF0F5" : "#FBEFE6", color: t.tipo === "Corte Láser" ? "#2E6F9E" : "#B25A1E" }}
+                    >
+                      {t.tipo}
+                    </span>
+                    <span
+                      className="inline-block text-xs font-medium px-2 py-0.5 rounded-sm"
+                      style={{ backgroundColor: t.confirmado ? "#EAF0E4" : "#FBEFE6", color: t.confirmado ? "#3D5A2E" : "#B25A1E" }}
+                    >
+                      {t.confirmado ? "Confirmado" : "Pendiente"}
+                    </span>
+                  </div>
+                  <div className="font-medium leading-snug">{t.cliente || "Sin cliente"}</div>
+                  {t.descripcion && <p className="text-sm text-[#4A463D] mt-0.5">{t.descripcion}</p>}
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm mt-2.5 pt-2.5 border-t border-[#EFEBE0]">
+                    <div>
+                      <span className="block text-[10px] uppercase tracking-wide text-[#8A8578]">Cantidad</span>
+                      <span className="font-mono">{t.cantidad ?? "—"}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[10px] uppercase tracking-wide text-[#8A8578]">Duración</span>
+                      <span className="font-mono">
+                        {t.tipo === "Corte Láser"
+                          ? (t.duracion_minutos != null ? `${t.duracion_minutos} min` : "—")
+                          : (t.duracion_horas != null ? `${t.duracion_horas} h` : "—")}
+                      </span>
+                    </div>
+                    {t.metros_cuadrados != null && (
+                      <div>
+                        <span className="block text-[10px] uppercase tracking-wide text-[#8A8578]">m²</span>
+                        <span className="font-mono">{Number(t.metros_cuadrados).toFixed(3)} m²</span>
+                      </div>
+                    )}
+                    <div>
+                      <span className="block text-[10px] uppercase tracking-wide text-[#8A8578]">Fecha</span>
+                      <span className="font-mono text-[#6B6558]">{new Date(t.fecha).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 mt-3">
+                    <div className="flex gap-2">
+                      <button onClick={() => abrirEditar(t)} className="flex items-center gap-1.5 px-3 py-2 border border-line rounded-sm text-sm font-medium text-ink">
+                        <Pencil size={15} /> Editar
+                      </button>
+                      <button onClick={() => imprimirTarjeta(t)} className="flex items-center gap-1.5 px-3 py-2 border border-line rounded-sm text-sm font-medium text-ink">
+                        <Printer size={15} /> Tarjeta
+                      </button>
+                    </div>
+                    {t.archivo_dxf && (
+                      <a href={t.archivo_dxf.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-[#3B5166] hover:underline shrink-0">
+                        <FileText size={14} /> DXF
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ))}
+            {!loading && trabajosFiltrados.length === 0 && <p className="text-center text-sm text-[#8A8578] py-8">Sin trabajos para este filtro</p>}
+          </div>
+
+          <div className="hidden sm:block bg-white border border-line rounded-sm overflow-x-auto w-full">
             <table className="w-full text-sm min-w-[960px]">
               <thead>
                 <tr className="text-left text-xs uppercase text-[#6B6558] border-b border-line">

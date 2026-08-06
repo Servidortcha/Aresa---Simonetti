@@ -195,7 +195,42 @@ export default function TallerPage() {
 
         <div className="w-full">
           <h2 className="font-display text-xl font-semibold text-ink mb-3">Historial de Taller</h2>
-          <div className="bg-white border border-line rounded-sm overflow-x-auto w-full">
+          {/* Móvil: tarjetas */}
+          <div className="sm:hidden space-y-3">
+            {loading && <p className="text-center text-sm text-[#8A8578] py-8">Cargando...</p>}
+            {!loading &&
+              registros.map((r) => (
+                <div key={r.id} className="bg-white border border-line rounded-sm p-4">
+                  <div className="font-medium leading-snug">{r.cliente || "Sin cliente"}</div>
+                  <div className="text-xs text-[#6B6558] font-mono mt-0.5">{new Date(r.fecha).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}</div>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm mt-2.5 pt-2.5 border-t border-[#EFEBE0]">
+                    <div>
+                      <span className="block text-[10px] uppercase tracking-wide text-[#8A8578]">Cantidad</span>
+                      <span className="font-mono">{r.cantidad ?? "—"}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[10px] uppercase tracking-wide text-[#8A8578]">Duración</span>
+                      <span className="font-mono">{r.duracion_horas != null ? `${r.duracion_horas} h` : "—"}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[10px] uppercase tracking-wide text-[#8A8578]">Personas</span>
+                      <span className="font-mono">{r.cantidad_personas ?? "—"}</span>
+                    </div>
+                  </div>
+                  {(r.descripcion_materiales || (r.archivos && r.archivos.length > 0)) && (
+                    <button onClick={() => setVerDetalle(r)} className="flex items-center justify-between w-full mt-3 pt-3 border-t border-[#EFEBE0] text-sm">
+                      <span className="flex items-center gap-1.5 text-[#3B5166] font-medium">
+                        <Paperclip size={14} /> Ver detalle
+                      </span>
+                      <span className="text-xs text-[#8A8578]">{(r.archivos || []).length} archivo{(r.archivos || []).length !== 1 ? "s" : ""}</span>
+                    </button>
+                  )}
+                </div>
+              ))}
+            {!loading && registros.length === 0 && <p className="text-center text-sm text-[#8A8578] py-8">Aún no hay registros de Taller</p>}
+          </div>
+
+          <div className="hidden sm:block bg-white border border-line rounded-sm overflow-x-auto w-full">
             <table className="w-full text-sm min-w-[760px]">
               <thead>
                 <tr className="text-left text-xs uppercase text-[#6B6558] border-b border-line">
