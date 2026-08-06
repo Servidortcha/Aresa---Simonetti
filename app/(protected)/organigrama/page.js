@@ -74,6 +74,7 @@ const CSS = `
 .organigrama .add-person-row{margin-top:10px;padding-top:10px;border-top:1px dashed var(--line);display:flex;gap:6px;flex-wrap:wrap;}
 .organigrama .add-person-row input[type=text]{flex:1;min-width:110px;font-size:16px;padding:6px 8px;border:1px solid var(--line);border-radius:4px;background:#FBF9F3;}
 .organigrama .add-person-row select{font-size:12px;padding:6px 6px;border:1px solid var(--line);border-radius:4px;background:#FBF9F3;}
+.organigrama .add-person-row select.picker-select{max-width:180px;flex:0 1 170px;font-size:11.5px;color:var(--muted);}
 .organigrama .add-person-row button{padding:6px 10px;font-size:11.5px;}
 .organigrama .empty-hint{font-size:12px;color:#A79A78;font-style:italic;padding:6px 0;}
 .organigrama footer{text-align:center;padding:18px 20px;font-size:11px;color:#A79A78;font-style:italic;}
@@ -89,9 +90,10 @@ const CSS = `
 }
 `;
 
-function FrenteCard({ frente, otros, onRename, onDelete, onAdd, onRemove, onRol, onMove }) {
+function FrenteCard({ frente, otros, disponibles, onRename, onDelete, onAdd, onRemove, onRol, onMove }) {
   const [nuevoNombre, setNuevoNombre] = useState("");
   const [nuevoRol, setNuevoRol] = useState(ROLES[0]);
+  const [picker, setPicker] = useState("");
 
   async function agregar() {
     const ok = await onAdd(frente, nuevoNombre, nuevoRol);
@@ -157,6 +159,24 @@ function FrenteCard({ frente, otros, onRename, onDelete, onAdd, onRemove, onRol,
       ))}
 
       <div className="add-person-row">
+        <select
+          value={picker}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (v) {
+              setNuevoNombre(v);
+              setPicker("");
+            }
+          }}
+          className="picker-select"
+        >
+          <option value="">De la grilla…</option>
+          {disponibles.map((o) => (
+            <option key={o.id} value={`${o.nombre} ${o.apellido}`}>
+              {o.apellido}, {o.nombre}
+            </option>
+          ))}
+        </select>
         <input
           type="text"
           placeholder="Nombre y apellido"
@@ -215,6 +235,15 @@ function OrganigramaInner() {
   useEffect(() => {
     cargar();
   }, []);
+
+  const asignados = new Set(
+    frentes.flatMap((f) => f.frente_personas.map((p) => p.nombre.trim().toLowerCase()))
+  );
+  const disponibles = operarios.filter((o) => {
+    const apellidoNombre = `${o.apellido}, ${o.nombre}`.toLowerCase();
+    const nombreApellido = `${o.nombre} ${o.apellido}`.toLowerCase();
+    return !asignados.has(apellidoNombre) && !asignados.has(nombreApellido);
+  });
 
   function showStatus(msg, error) {
     setStatus({ msg, error });
@@ -393,6 +422,7 @@ function OrganigramaInner() {
               key={f.id}
               frente={f}
               otros={frentes.filter((x) => x.id !== f.id)}
+              disponibles={disponibles}
               onRename={renameFrente}
               onDelete={deleteFrente}
               onAdd={addPersona}
