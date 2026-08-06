@@ -304,10 +304,6 @@ function EmpleadosPageInner() {
           errores.push(`Fila ${numeroFila}: legajo ${legajo} ya existe — se omitió`);
           return;
         }
-        if (sueldo !== "" && sueldo != null && isNaN(Number(sueldo))) {
-          errores.push(`Fila ${numeroFila}: sueldo básico inválido — se omitió`);
-          return;
-        }
 
         validas.push({
           legajo_nro: legajo || null,
@@ -320,7 +316,7 @@ function EmpleadosPageInner() {
           fecha_antiguedad: excelDateToISO(XLSX, valor(fila, "fecha_antiguedad")),
           categoria: String(valor(fila, "categoria") || "").trim() || null,
           tipo_contrato: String(valor(fila, "tipo_contrato") || "").trim() || "Pers. Construcción",
-          sueldo_basico: sueldo === "" || sueldo == null ? null : Number(sueldo),
+          sueldo_basico: sueldo === "" || sueldo == null || isNaN(Number(sueldo)) ? null : Number(sueldo),
           banco: String(valor(fila, "banco") || "").trim() || null,
           lugar_pago: String(valor(fila, "lugar_pago") || "").trim() || null,
         });
