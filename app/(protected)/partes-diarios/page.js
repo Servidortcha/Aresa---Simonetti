@@ -46,6 +46,9 @@ export default function PartesDiariosPage() {
   const [fecha, setFecha] = useState(todayISO());
   const [tareas, setTareas] = useState("");
   const [novedades, setNovedades] = useState("");
+  const [numeroParte, setNumeroParte] = useState("");
+  const [horas, setHoras] = useState([]);
+  const [personasPorFrente, setPersonasPorFrente] = useState({});
   const [archivosSeleccionados, setArchivosSeleccionados] = useState([]);
   const [archivosActuales, setArchivosActuales] = useState([]);
   const [enviando, setEnviando] = useState(false);
@@ -68,13 +71,14 @@ export default function PartesDiariosPage() {
 
   async function cargar() {
     setLoading(true);
-    const [{ data: f, error: ef }, { data: p, error: ep }] = await Promise.all([
+    const [{ data: f, error: ef }, { data: p, error: ep }, { data: fp, error: efp }] = await Promise.all([
       supabase.from("frentes_trabajo").select("id, nombre, encargado_user_id").order("nombre"),
       supabase
         .from("partes_diarios")
         .select("*")
         .order("fecha", { ascending: false })
         .order("created_at", { ascending: false }),
+      supabase.from("frente_personas").select("frente_id, nombre"),
     ]);
     if (ef) setError("Error al cargar frentes: " + ef.message);
     else setFrentes(f || []);
@@ -83,6 +87,15 @@ export default function PartesDiariosPage() {
       const visibles = (f || []).filter((x) => esAdmin || x.encargado_user_id === session?.user?.id);
       const ids = new Set(visibles.map((x) => x.id));
       setPartes((p || []).filter((x) => ids.has(x.frente_id)));
+    }
+    if (efp) setError("Error al cargar personas: " + efp.message);
+    else {
+      const map = {};
+      (fp || []).forEach((x) => {
+        if (!map[x.frente_id]) map[x.frente_id] = [];
+        map[x.frente_id].push(x.nombre);
+      });
+      setPersonasPorFrente(map);
     }
     setLoading(false);
   }
@@ -98,6 +111,12 @@ export default function PartesDiariosPage() {
     return map;
   }, [frentes]);
 
+  const esBunge = useMemo(() => nombreFrente[frenteId] === "Bunge Tancacha", [nombreFrente, frenteId]);
+
+  function horasIniciales(frenteIdSel) {
+    return (personasPorFrente[frenteIdSel] || []).map((nombre) => ({ nombre, horas: "" }));
+  }
+
   function abrirNuevo() {
     if (frentesVisibles.length === 0) {
       setError(esAdmin ? "No hay frentes cargados. Creá uno en Organigrama." : "Tu frente todavía no está configurado. Avisá al administrador.");
@@ -108,6 +127,8 @@ export default function PartesDiariosPage() {
     setFecha(todayISO());
     setTareas("");
     setNovedades("");
+    setNumeroParte("");
+    setHoras(horasIniciales(frentesVisibles[0].id));
     setArchivosSeleccionados([]);
     setArchivosActuales([]);
     setShowForm(true);
@@ -119,6 +140,12 @@ export default function PartesDiariosPage() {
     setFecha(parte.fecha);
     setTareas(parte.tareas || "");
     setNovedades(parte.novedades || "");
+    setNumeroParte(parte.numero_parte_bunge || "");
+    setHoras(
+      Array.isArray(parte.horas_por_persona) && parte.horas_por_persona.length > 0
+        ? parte.horas_por_persona.map((h) => ({ nombre: h.nombre || "", horas: String(h.horas ?? "") }))
+        : horasIniciales(parte.frente_id)
+    );
     setArchivosSeleccionados([]);
     setArchivosActuales(parte.archivos || []);
     setShowForm(true);
@@ -160,6 +187,17 @@ export default function PartesDiariosPage() {
       novedades: novedades.trim() || null,
       archivos: archivosSubidos.length ? archivosSubidos : null,
     };
+
+    if (esBunge) {
+      payload.numero_parte_bunge = numeroParte.trim() || null;
+      const horasOk = horas
+        .filter((h) => h.nombre.trim() || String(h.horas).trim())
+        .map((h) => ({ nombre: h.nombre.trim() || "Sin nombre", horas: Number(h.horas) || 0 }));
+      payload.horas_por_persona = horasOk.length ? horasOk : null;
+    } else {
+      payload.numero_parte_bunge = null;
+      payload.horas_por_persona = null;
+    }
 
     let error;
     if (editing) {
@@ -255,6 +293,26 @@ export default function PartesDiariosPage() {
                 )}
               </div>
 
+              {(p.numero_parte_bunge || (p.horas_por_persona && p.horas_por_persona.length > 0)) && (
+                <div className="bg-[#EAF0F5] border border-[#C9DCE8] rounded-sm px-3 py-2 mb-2">
+                  {p.numero_parte_bunge && (
+                    <div className="text-[10px] uppercase tracking-wide text-[#2E6F9E] mb-1">
+                      N° de parte Bunge: <span className="font-mono normal-case">{p.numero_parte_bunge}</span>
+                    </div>
+                  )}
+                  {p.horas_por_persona && p.horas_por_persona.length > 0 && (
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+                      {p.horas_por_persona.map((h, i) => (
+                        <div key={i} className="flex justify-between text-sm text-[#3B5166]">
+                          <span className="truncate pr-2">{h.nombre}</span>
+                          <span className="font-mono shrink-0">{h.horas} h</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {p.tareas && (
                 <div className="text-sm mb-2">
                   <span className="block text-[10px] uppercase tracking-wide text-[#8A8578] mb-0.5">Tareas realizadas</span>
@@ -308,7 +366,16 @@ export default function PartesDiariosPage() {
             <form onSubmit={submit} className="p-5">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field label="Frente de trabajo">
-                  <select className={inputCls} value={frenteId} onChange={(e) => setFrenteId(e.target.value)} disabled={!esAdmin && frentesVisibles.length <= 1}>
+                  <select
+                    className={inputCls}
+                    value={frenteId}
+                    onChange={(e) => {
+                      setFrenteId(e.target.value);
+                      setNumeroParte("");
+                      setHoras(horasIniciales(e.target.value));
+                    }}
+                    disabled={!esAdmin && frentesVisibles.length <= 1}
+                  >
                     {frentesVisibles.map((f) => (
                       <option key={f.id} value={f.id}>
                         {f.nombre}
@@ -320,6 +387,56 @@ export default function PartesDiariosPage() {
                   <input type="date" className={inputCls} value={fecha} onChange={(e) => setFecha(e.target.value)} required />
                 </Field>
               </div>
+
+              {esBunge && (
+                <>
+                  <Field label="N° de parte diario de Bunge">
+                    <input className={inputCls} value={numeroParte} onChange={(e) => setNumeroParte(e.target.value)} placeholder="Ej. 4521" />
+                  </Field>
+
+                  <Field label="Horas por persona del sector">
+                    <div className="space-y-2">
+                      {horas.length === 0 && (
+                        <p className="text-xs text-[#8A8578]">No hay personas cargadas en el organigrama para este frente. Agregalas abajo.</p>
+                      )}
+                      {horas.map((h, idx) => (
+                        <div key={idx} className="flex items-center gap-2">
+                          <input
+                            className={inputCls}
+                            value={h.nombre}
+                            onChange={(e) => setHoras((prev) => prev.map((x, i) => (i === idx ? { ...x, nombre: e.target.value } : x)))}
+                            placeholder="Nombre"
+                          />
+                          <input
+                            type="number"
+                            step="0.5"
+                            min="0"
+                            className={inputCls + " w-24 shrink-0"}
+                            value={h.horas}
+                            onChange={(e) => setHoras((prev) => prev.map((x, i) => (i === idx ? { ...x, horas: e.target.value } : x)))}
+                            placeholder="hs"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setHoras((prev) => prev.filter((_, i) => i !== idx))}
+                            className="text-[#8A8578] hover:text-red p-1 shrink-0"
+                            title="Quitar persona"
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setHoras((prev) => [...prev, { nombre: "", horas: "" }])}
+                        className="flex items-center gap-1 text-sm text-[#3B5166] hover:underline"
+                      >
+                        <Plus size={14} /> Agregar persona
+                      </button>
+                    </div>
+                  </Field>
+                </>
+              )}
 
               <Field label="Tareas realizadas">
                 <textarea className={textareaCls} value={tareas} onChange={(e) => setTareas(e.target.value)} placeholder="Detallá qué se hizo en la jornada..." />
