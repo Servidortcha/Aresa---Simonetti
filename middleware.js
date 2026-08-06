@@ -73,7 +73,7 @@ export async function middleware(request) {
   }
 
   const home =
-    rol === "encargado" ? "/partes-diarios" : rol === "grua" ? "/grua" : "/ingreso-egreso";
+    rol === "admin" ? "/panel" : rol === "encargado" ? "/partes-diarios" : rol === "grua" ? "/grua" : "/ingreso-egreso";
 
   if (isLoginRoute) {
     if (authenticated) {
@@ -86,6 +86,10 @@ export async function middleware(request) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("next", pathname);
     return NextResponse.redirect(loginUrl);
+  }
+
+  if (pathname === "/") {
+    return NextResponse.redirect(new URL(home, request.url));
   }
 
   const required = requiredRoles(pathname);
