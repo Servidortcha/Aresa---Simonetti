@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
 import { useAuth } from "../../../lib/AuthContext";
-import { Truck, Download } from "lucide-react";
+import { Truck, Download, ImagePlus } from "lucide-react";
 
 const emptyForm = { cliente: "", ubicacion: "", descripcion: "", tipo_grua: "", operador: "", horas_uso: "" };
 
@@ -29,6 +29,7 @@ export default function GruaPage() {
   const [error, setError] = useState(null);
   const [confirmacion, setConfirmacion] = useState(null);
   const [form, setForm] = useState(emptyForm);
+  const [foto, setFoto] = useState(null);
   const [enviando, setEnviando] = useState(false);
 
   async function cargar() {
@@ -52,6 +53,24 @@ export default function GruaPage() {
     if (enviando) return;
     setError(null);
     setEnviando(true);
+
+    let fotoUrl = null;
+    if (foto) {
+      const nombreSeguro = foto.name
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-zA-Z0-9._-]/g, "_");
+      const path = `${Date.now()}-${nombreSeguro}`;
+      const { error: uploadError } = await supabase.storage.from("grua-archivos").upload(path, foto);
+      if (uploadError) {
+        setError("Error al subir la foto: " + uploadError.message);
+        setEnviando(false);
+        return;
+      }
+      const { data: pub } = supabase.storage.from("grua-archivos").getPublicUrl(path);
+      fotoUrl = pub.publicUrl;
+    }
+
     const { error } = await supabase.from("trabajos_grua").insert({
       cliente: form.cliente || null,
       ubicacion: form.ubicacion || null,
@@ -59,6 +78,7 @@ export default function GruaPage() {
       tipo_grua: form.tipo_grua || null,
       operador: form.operador || null,
       horas_uso: form.horas_uso ? Number(form.horas_uso) : null,
+      foto_url: fotoUrl,
       usuario_email: session?.user?.email || null,
     });
     setEnviando(false);
@@ -67,6 +87,7 @@ export default function GruaPage() {
       return;
     }
     setForm(emptyForm);
+    setFoto(null);
     setConfirmacion("Trabajo registrado");
     setTimeout(() => setConfirmacion(null), 3000);
     cargar();
@@ -134,6 +155,19 @@ export default function GruaPage() {
             </Field>
           </div>
 
+          <Field label="Foto del trabajo">
+            <label className="flex items-center gap-2 bg-white border border-line rounded-sm px-3 py-2 text-sm text-[#4A463D] cursor-pointer hover:bg-[#F2EEE3] transition-colors">
+              <ImagePlus size={16} color="#6B6558" />
+              {foto ? foto.name : "Elegir archivo (JPG/PNG)"}
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => setFoto(e.target.files?.[0] || null)}
+              />
+            </label>
+          </Field>
+
           <button type="submit" disabled={enviando} className="w-full mt-2 bg-ink text-paper py-2.5 rounded-sm text-sm font-medium hover:bg-[#333731] disabled:opacity-60">
             {enviando ? "Guardando..." : "Registrar trabajo"}
           </button>
@@ -142,7 +176,7 @@ export default function GruaPage() {
         <div className="w-full">
           <h2 className="font-display text-xl font-semibold text-ink mb-3">Historial de trabajos con grúa</h2>
           <div className="bg-white border border-line rounded-sm overflow-x-auto w-full">
-            <table className="w-full text-sm min-w-[860px]">
+            <table className="w-full text-sm min-w-[900px]">
               <thead>
                 <tr className="text-left text-xs uppercase text-[#6B6558] border-b border-line">
                   <th className="px-4 py-3 font-medium">Fecha</th>
@@ -152,10 +186,11 @@ export default function GruaPage() {
                   <th className="px-4 py-3 font-medium">Tipo/Capacidad</th>
                   <th className="px-4 py-3 font-medium">Operador</th>
                   <th className="px-4 py-3 font-medium">Horas</th>
+                  <th className="px-4 py-3 font-medium">Foto</th>
                 </tr>
               </thead>
               <tbody>
-                {loading && <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-[#8A8578]">Cargando...</td></tr>}
+                {loading && <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-[#8A8578]">Cargando...</td></tr>}
                 {!loading && trabajos.map((t, idx) => (
                   <tr key={t.id} className={`${idx % 2 === 1 ? "bg-[#F7F4EC]" : ""} ${idx !== trabajos.length - 1 ? "border-b border-[#EFEBE0]" : ""}`}>
                     <td className="px-4 py-3 text-[#6B6558] font-mono whitespace-nowrap">{new Date(t.fecha).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" })}</td>
@@ -165,10 +200,20 @@ export default function GruaPage() {
                     <td className="px-4 py-3 text-[#4A463D] whitespace-nowrap">{t.tipo_grua || "—"}</td>
                     <td className="px-4 py-3 text-[#4A463D] whitespace-nowrap">{t.operador || "—"}</td>
                     <td className="px-4 py-3 font-mono whitespace-nowrap">{t.horas_uso != null ? `${t.horas_uso} h` : "—"}</td>
+                    <td className="px-4 py-3">
+                      {t.foto_url ? (
+                        <a href={t.foto_url} target="_blank" rel="noopener noreferrer" title="Ver foto">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={t.foto_url} alt="Foto del trabajo" className="h-14 w-14 object-cover rounded-sm border border-line" />
+                        </a>
+                      ) : (
+                        <span className="text-[#C5BFB0]">—</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
                 {!loading && trabajos.length === 0 && (
-                  <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-[#8A8578]">Aún no hay trabajos registrados</td></tr>
+                  <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-[#8A8578]">Aún no hay trabajos registrados</td></tr>
                 )}
               </tbody>
             </table>
