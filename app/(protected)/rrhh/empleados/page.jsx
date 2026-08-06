@@ -172,6 +172,68 @@ function EmpleadosPageInner() {
     return null;
   }
 
+  function normalizarHeader(h) {
+    return String(h || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "");
+  }
+
+  // Acepta encabezados en español o en inglés técnico.
+  // "Legajo N°" → legajo_nro, "Sueldo Básico" → sueldo_basico, etc.
+  const HEADER_MAP = {
+    legajo: "legajo_nro",
+    legajos: "legajo_nro",
+    legajonro: "legajo_nro",
+    apellido: "apellido",
+    apellidos: "apellido",
+    nombre: "nombre",
+    nombres: "nombre",
+    cuil: "cuil",
+    domicilio: "domicilio",
+    direccion: "domicilio",
+    localidad: "localidad",
+    fechaingreso: "fecha_ingreso",
+    ingreso: "fecha_ingreso",
+    fechaantiguedad: "fecha_antiguedad",
+    antiguedad: "fecha_antiguedad",
+    categoria: "categoria",
+    tipocontrato: "tipo_contrato",
+    contrato: "tipo_contrato",
+    sueldobasico: "sueldo_basico",
+    sueldo: "sueldo_basico",
+    basico: "sueldo_basico",
+    banco: "banco",
+    lugarpago: "lugar_pago",
+    lugardepago: "lugar_pago",
+  };
+
+  async function descargarPlantilla() {
+    const XLSX = await import("xlsx");
+    const filas = [
+      {
+        "Legajo N°": 101,
+        Apellido: "Pérez",
+        Nombre: "Juan",
+        "C.U.I.L.": "20-12345678-9",
+        Domicilio: "Calle 1 234",
+        Localidad: "Córdoba",
+        "Fecha de Ingreso": "2024-01-02",
+        "Fecha Antigüedad": "2024-01-02",
+        Categoría: "Oficial",
+        "Tipo de contrato": "Pers. Construcción",
+        "Sueldo Básico": 700000,
+        Banco: "Banco Nación",
+        "Lugar de pago": "Casa central",
+      },
+    ];
+    const hoja = XLSX.utils.json_to_sheet(filas);
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, hoja, "Empleados");
+    XLSX.writeFile(libro, "plantilla-empleados.xlsx");
+  }
+
   async function handleImportarExcel(e) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -187,22 +249,63 @@ function EmpleadosPageInner() {
       const hoja = workbook.Sheets[workbook.SheetNames[0]];
       const filas = XLSX.utils.sheet_to_json(hoja, { defval: "" });
 
+      if (filas.length === 0) {
+        setResultadoImport({ ok: 0, errores: ["La planilla está vacía."] });
+        setImportando(false);
+        e.target.value = "";
+        return;
+      }
+
+      // Mapa columna → campo, con encabezados en español o técnicos
+      const campoPorHeader = {};
+      Object.keys(filas[0] || {}).forEach((key) => {
+        const campo = HEADER_MAP[normalizarHeader(key)];
+        if (campo) campoPorHeader[key] = campo;
+      });
+
+      if (Object.keys(campoPorHeader).length === 0) {
+        setResultadoImport({
+          ok: 0,
+          errores: [
+            "No se reconocieron las columnas. Descargá la plantilla y completala con los mismos encabezados.",
+          ],
+        });
+        setImportando(false);
+        e.target.value = "";
+        return;
+      }
+
+      // Legajos ya existentes para no duplicar
+      const { data: existentes } = await supabase.from("empleados").select("legajo_nro");
+      const legajosExistentes = new Set((existentes || []).map((x) => String(x.legajo_nro).trim()));
+
+      function valor(fila, campo) {
+        for (const [k, c] of Object.entries(campoPorHeader)) {
+          if (c === campo) return fila[k];
+        }
+        return undefined;
+      }
+
       const validas = [];
       const errores = [];
 
       filas.forEach((fila, idx) => {
         const numeroFila = idx + 2; // fila 1 es el encabezado
-        const legajo = String(fila.legajo_nro || "").trim();
-        const apellido = String(fila.apellido || "").trim();
-        const nombre = String(fila.nombre || "").trim();
-        const sueldo = fila.sueldo_basico;
+        const legajo = String(valor(fila, "legajo_nro") || "").trim();
+        const apellido = String(valor(fila, "apellido") || "").trim();
+        const nombre = String(valor(fila, "nombre") || "").trim();
+        const sueldo = valor(fila, "sueldo_basico");
 
         if (!legajo || !apellido || !nombre) {
-          errores.push(`Fila ${numeroFila}: falta legajo_nro, apellido o nombre — se omitió`);
+          errores.push(`Fila ${numeroFila}: falta legajo, apellido o nombre — se omitió`);
+          return;
+        }
+        if (legajosExistentes.has(legajo)) {
+          errores.push(`Fila ${numeroFila}: legajo ${legajo} ya existe — se omitió`);
           return;
         }
         if (sueldo === "" || isNaN(Number(sueldo))) {
-          errores.push(`Fila ${numeroFila}: sueldo_basico inválido — se omitió`);
+          errores.push(`Fila ${numeroFila}: sueldo básico inválido — se omitió`);
           return;
         }
 
@@ -210,16 +313,16 @@ function EmpleadosPageInner() {
           legajo_nro: legajo,
           apellido,
           nombre,
-          domicilio: String(fila.domicilio || "").trim() || null,
-          localidad: String(fila.localidad || "").trim() || null,
-          cuil: String(fila.cuil || "").trim() || null,
-          fecha_ingreso: excelDateToISO(XLSX, fila.fecha_ingreso),
-          fecha_antiguedad: excelDateToISO(XLSX, fila.fecha_antiguedad),
-          categoria: String(fila.categoria || "").trim() || null,
-          tipo_contrato: String(fila.tipo_contrato || "").trim() || "Pers. Construcción",
+          domicilio: String(valor(fila, "domicilio") || "").trim() || null,
+          localidad: String(valor(fila, "localidad") || "").trim() || null,
+          cuil: String(valor(fila, "cuil") || "").trim() || null,
+          fecha_ingreso: excelDateToISO(XLSX, valor(fila, "fecha_ingreso")),
+          fecha_antiguedad: excelDateToISO(XLSX, valor(fila, "fecha_antiguedad")),
+          categoria: String(valor(fila, "categoria") || "").trim() || null,
+          tipo_contrato: String(valor(fila, "tipo_contrato") || "").trim() || "Pers. Construcción",
           sueldo_basico: Number(sueldo),
-          banco: String(fila.banco || "").trim() || null,
-          lugar_pago: String(fila.lugar_pago || "").trim() || null,
+          banco: String(valor(fila, "banco") || "").trim() || null,
+          lugar_pago: String(valor(fila, "lugar_pago") || "").trim() || null,
         });
       });
 
@@ -260,6 +363,13 @@ function EmpleadosPageInner() {
           Empleados
         </h1>
 
+        <button
+          onClick={descargarPlantilla}
+          className="px-4 py-2 rounded border font-medium text-sm"
+          style={{ borderColor: "#163A5F", color: "#163A5F" }}
+        >
+          Descargar plantilla
+        </button>
         <label
           className="px-4 py-2 rounded text-white font-medium text-sm cursor-pointer inline-block"
           style={{ backgroundColor: importando ? "#8FA0AC" : "#163A5F" }}
