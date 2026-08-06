@@ -60,6 +60,9 @@ const CSS = `
 .organigrama .fronts{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;}
 .organigrama .front-card{background:#fff;border:1.4px solid var(--line);border-radius:8px;padding:14px 16px 16px;}
 .organigrama .front-card .fc-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px;}
+.organigrama .front-card .fc-acceso{display:flex;align-items:center;justify-content:center;margin:-4px 0 8px;}
+.organigrama .front-card .acceso{font-size:10.5px;color:#A79A78;letter-spacing:0.4px;text-transform:uppercase;}
+.organigrama .front-card .acceso.ok{color:#4B7355;}
 .organigrama .front-card input.name-input{font-size:14.5px;font-weight:700;color:var(--navy);border:none;background:transparent;width:100%;border-bottom:1px dashed transparent;}
 .organigrama .front-card input.name-input:focus{outline:none;border-bottom:1px dashed var(--ocre);}
 .organigrama .person{padding:8px 0;border-top:1px solid #EFE9D8;}
@@ -110,6 +113,17 @@ function FrenteCard({ frente, otros, onRename, onDelete, onAdd, onRemove, onRol,
         <button className="btn-danger-mini" title="Eliminar este frente" onClick={() => onDelete(frente)}>
           ✕
         </button>
+      </div>
+      <div className="fc-acceso">
+        {frente.encargado_user_id ? (
+          <span className="acceso ok" title="Encargado con cuenta vinculada">
+            ✓ Encargado con acceso
+          </span>
+        ) : (
+          <span className="acceso" title="Sin cuenta vinculada para cargar partes diarios">
+            Sin acceso de encargado
+          </span>
+        )}
       </div>
 
       {frente.frente_personas.length === 0 && <div className="empty-hint">Sin personal asignado.</div>}
@@ -179,7 +193,7 @@ function OrganigramaInner() {
   async function cargar() {
     setLoading(true);
     const [resFrentes, resPersonas, resEmpleados] = await Promise.all([
-      supabase.from("frentes_trabajo").select("id, nombre").order("nombre"),
+      supabase.from("frentes_trabajo").select("id, nombre, encargado_user_id").order("nombre"),
       supabase.from("frente_personas").select("id, frente_id, nombre, rol").order("created_at"),
       supabase.from("empleados").select("id, apellido, nombre").eq("activo", true).order("apellido"),
     ]);

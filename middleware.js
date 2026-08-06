@@ -3,14 +3,15 @@ import { createServerClient } from "@supabase/ssr";
 
 const COOKIE_MARKER = "-auth-token";
 
-function requiredRole(pathname) {
-  if (/^\/rrhh(\/|$)/.test(pathname)) return "admin";
-  if (/^\/stock-panol(\/|$)/.test(pathname)) return "admin";
-  if (/^\/taller(\/|$)/.test(pathname)) return "admin";
-  if (/^\/organigrama(\/|$)/.test(pathname)) return "admin";
-  if (/^\/stock(\/|$)/.test(pathname)) return "taller_stock";
-  if (/^\/trabajos(\/|$)/.test(pathname)) return "taller_stock";
-  if (/^\/nesting(\/|$)/.test(pathname)) return "taller_stock";
+function requiredRoles(pathname) {
+  if (/^\/rrhh(\/|$)/.test(pathname)) return ["admin"];
+  if (/^\/stock-panol(\/|$)/.test(pathname)) return ["admin"];
+  if (/^\/taller(\/|$)/.test(pathname)) return ["admin"];
+  if (/^\/organigrama(\/|$)/.test(pathname)) return ["admin"];
+  if (/^\/partes-diarios(\/|$)/.test(pathname)) return ["admin", "encargado"];
+  if (/^\/stock(\/|$)/.test(pathname)) return ["admin", "taller_stock"];
+  if (/^\/trabajos(\/|$)/.test(pathname)) return ["admin", "taller_stock"];
+  if (/^\/nesting(\/|$)/.test(pathname)) return ["admin", "taller_stock"];
   return null;
 }
 
@@ -55,21 +56,8 @@ export async function middleware(request) {
 
   const authenticated = Boolean(user) || (degraded && hasAuthCookie);
 
-  if (isLoginRoute) {
-    if (authenticated) {
-      return NextResponse.redirect(new URL("/ingreso-egreso", request.url));
-    }
-    return response;
-  }
-
-  if (!authenticated) {
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("next", pathname);
-    return NextResponse.redirect(loginUrl);
-  }
-
+  let rol = "operario";
   if (!degraded && user) {
-    let rol = "operario";
     try {
       const { data } = await supabase
         .from("perfiles")
@@ -80,15 +68,26 @@ export async function middleware(request) {
     } catch {
       rol = "operario";
     }
+  }
 
-    const required = requiredRole(pathname);
-    if (required) {
-      const allowed =
-        required === "admin" ? rol === "admin" : ["admin", "taller_stock"].includes(rol);
-      if (!allowed) {
-        return NextResponse.redirect(new URL("/ingreso-egreso", request.url));
-      }
+  const home = rol === "encargado" ? "/partes-diarios" : "/ingreso-egreso";
+
+  if (isLoginRoute) {
+    if (authenticated) {
+      return NextResponse.redirect(new URL(home, request.url));
     }
+    return response;
+  }
+
+  if (!authenticated) {
+    const loginUrl = new URL("/login", request.url);
+    loginUrl.searchParams.set("next", pathname);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  const required = requiredRoles(pathname);
+  if (required && !required.includes(rol)) {
+    return NextResponse.redirect(new URL(home, request.url));
   }
 
   return response;

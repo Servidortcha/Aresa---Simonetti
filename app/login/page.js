@@ -26,7 +26,19 @@ export default function LoginPage() {
       setError("Correo o contraseña incorrectos.");
       return;
     }
-    router.replace("/ingreso-egreso");
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    let destino = "/ingreso-egreso";
+    if (user) {
+      const { data: perfil } = await supabase
+        .from("perfiles")
+        .select("rol")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (perfil?.rol === "encargado") destino = "/partes-diarios";
+    }
+    router.replace(destino);
   }
 
   return (
