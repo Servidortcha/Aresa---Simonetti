@@ -296,21 +296,21 @@ function EmpleadosPageInner() {
         const nombre = String(valor(fila, "nombre") || "").trim();
         const sueldo = valor(fila, "sueldo_basico");
 
-        if (!legajo || !apellido || !nombre) {
-          errores.push(`Fila ${numeroFila}: falta legajo, apellido o nombre — se omitió`);
+        if (!apellido || !nombre) {
+          errores.push(`Fila ${numeroFila}: falta apellido o nombre — se omitió`);
           return;
         }
-        if (legajosExistentes.has(legajo)) {
+        if (legajo && legajosExistentes.has(legajo)) {
           errores.push(`Fila ${numeroFila}: legajo ${legajo} ya existe — se omitió`);
           return;
         }
-        if (sueldo === "" || isNaN(Number(sueldo))) {
+        if (sueldo !== "" && sueldo != null && isNaN(Number(sueldo))) {
           errores.push(`Fila ${numeroFila}: sueldo básico inválido — se omitió`);
           return;
         }
 
         validas.push({
-          legajo_nro: legajo,
+          legajo_nro: legajo || null,
           apellido,
           nombre,
           domicilio: String(valor(fila, "domicilio") || "").trim() || null,
@@ -320,7 +320,7 @@ function EmpleadosPageInner() {
           fecha_antiguedad: excelDateToISO(XLSX, valor(fila, "fecha_antiguedad")),
           categoria: String(valor(fila, "categoria") || "").trim() || null,
           tipo_contrato: String(valor(fila, "tipo_contrato") || "").trim() || "Pers. Construcción",
-          sueldo_basico: Number(sueldo),
+          sueldo_basico: sueldo === "" || sueldo == null ? null : Number(sueldo),
           banco: String(valor(fila, "banco") || "").trim() || null,
           lugar_pago: String(valor(fila, "lugar_pago") || "").trim() || null,
         });
