@@ -71,15 +71,17 @@ export default function PartesDiariosPage() {
 
   async function cargar() {
     setLoading(true);
-    const [{ data: f, error: ef }, { data: p, error: ep }, { data: fp, error: efp }] = await Promise.all([
+    const [{ data: f, error: ef }, { data: p, error: ep }, resPersonal] = await Promise.all([
       supabase.from("frentes_trabajo").select("id, nombre, encargado_user_id").order("nombre"),
       supabase
         .from("partes_diarios")
         .select("*")
         .order("fecha", { ascending: false })
         .order("created_at", { ascending: false }),
-      supabase.from("frente_personas").select("frente_id, nombre"),
+      esAdmin ? supabase.from("frente_personas").select("frente_id, nombre") : supabase.rpc("mi_personal"),
     ]);
+    const efp = resPersonal.error;
+    const fp = resPersonal.data;
     if (ef) setError("Error al cargar frentes: " + ef.message);
     else setFrentes(f || []);
     if (ep) setError("Error al cargar partes: " + ep.message);
