@@ -6,21 +6,44 @@ import { usePathname, useRouter } from "next/navigation";
 import { LogOut, Menu, X } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 
-const TABS = [
-  { href: "/ingreso-egreso", label: "Ingreso / Egreso", roles: ["admin", "taller_stock", "operario"] },
-  { href: "/stock", label: "Stock", roles: ["admin", "taller_stock"] },
-  { href: "/movimientos", label: "Movimientos", roles: ["admin"] },
-  { href: "/stock-panol", label: "Stock Pañol", roles: ["admin"] },
-  { href: "/trabajos", label: "Trabajos", roles: ["admin", "taller_stock"] },
-  { href: "/taller", label: "Taller", roles: ["admin"] },
-  { href: "/grua", label: "Grúa", roles: ["admin", "grua"] },
-  { href: "/organigrama", label: "Organigrama", roles: ["admin"] },
-  { href: "/partes-diarios", label: "Partes diarios", roles: ["admin", "encargado"] },
-  { href: "/nesting", label: "Nesting", roles: ["admin", "taller_stock"] },
-  { href: "/inglete", label: "Inglete", roles: ["admin", "taller_stock", "operario", "encargado"] },
-  { href: "/rrhh/empleados", label: "Empleados", roles: ["admin"] },
-  { href: "/rrhh/conceptos", label: "Conceptos", roles: ["admin"] },
-  { href: "/rrhh/liquidacion", label: "Liquidación", roles: ["admin"] },
+const GROUPS = [
+  {
+    label: "Movimiento",
+    items: [
+      { href: "/ingreso-egreso", label: "Ingreso / Egreso", roles: ["admin", "taller_stock", "operario"] },
+      { href: "/stock", label: "Stock", roles: ["admin", "taller_stock"] },
+      { href: "/movimientos", label: "Movimientos", roles: ["admin"] },
+      { href: "/stock-panol", label: "Stock Pañol", roles: ["admin"] },
+    ],
+  },
+  {
+    label: "Producción",
+    items: [
+      { href: "/trabajos", label: "Trabajos", roles: ["admin", "taller_stock"] },
+      { href: "/taller", label: "Taller", roles: ["admin"] },
+      { href: "/partes-diarios", label: "Partes diarios", roles: ["admin", "encargado"] },
+      { href: "/grua", label: "Grúa", roles: ["admin", "grua"] },
+    ],
+  },
+  {
+    label: "Herramientas",
+    items: [
+      { href: "/nesting", label: "Nesting", roles: ["admin", "taller_stock"] },
+      { href: "/inglete", label: "Inglete", roles: ["admin", "taller_stock", "operario", "encargado"] },
+    ],
+  },
+  {
+    label: "Organización",
+    items: [{ href: "/organigrama", label: "Organigrama", roles: ["admin"] }],
+  },
+  {
+    label: "RRHH",
+    items: [
+      { href: "/rrhh/empleados", label: "Empleados", roles: ["admin"] },
+      { href: "/rrhh/conceptos", label: "Conceptos", roles: ["admin"] },
+      { href: "/rrhh/liquidacion", label: "Liquidación", roles: ["admin"] },
+    ],
+  },
 ];
 function AresaMark() {
   return (
@@ -38,7 +61,10 @@ export default function Nav({ userEmail, rol }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
 
-  const tabs = TABS.filter((t) => t.roles.includes(rol));
+  const visibleGroups = GROUPS.map((g) => ({
+    ...g,
+    items: g.items.filter((t) => t.roles.includes(rol)),
+  })).filter((g) => g.items.length > 0);
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -86,20 +112,27 @@ export default function Nav({ userEmail, rol }) {
         </div>
 
         <div className="flex flex-col gap-1 flex-1">
-          {tabs.map((t) => (
-            <Link
-              key={t.href}
-              href={t.href}
-              onClick={() => setOpen(false)}
-              className="px-3 py-2.5 rounded-sm text-sm transition-colors"
-              style={{
-                backgroundColor: pathname === t.href ? "#F2EEE3" : "transparent",
-                color: pathname === t.href ? "#1C1F1C" : "#B8B2A2",
-                fontWeight: pathname === t.href ? 600 : 400,
-              }}
-            >
-              {t.label}
-            </Link>
+          {visibleGroups.map((g) => (
+            <div key={g.label} className="mb-1">
+              <span className="block px-3 pt-3 pb-1.5 text-[10px] uppercase tracking-[0.12em] text-[#6A6F76]">{g.label}</span>
+              <div className="flex flex-col gap-1">
+                {g.items.map((t) => (
+                  <Link
+                    key={t.href}
+                    href={t.href}
+                    onClick={() => setOpen(false)}
+                    className="px-3 py-2.5 rounded-sm text-sm transition-colors"
+                    style={{
+                      backgroundColor: pathname === t.href ? "#F2EEE3" : "transparent",
+                      color: pathname === t.href ? "#1C1F1C" : "#B8B2A2",
+                      fontWeight: pathname === t.href ? 600 : 400,
+                    }}
+                  >
+                    {t.label}
+                  </Link>
+                ))}
+              </div>
+            </div>
           ))}
         </div>
 
