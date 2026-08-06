@@ -53,6 +53,11 @@ as $$
 $$;
 
 -- 4) RLS: admin puede todo; cada encargado solo su frente
+drop policy if exists "frentes_trabajo_select_encargado" on public.frentes_trabajo;
+create policy "frentes_trabajo_select_encargado" on public.frentes_trabajo
+  for select to authenticated
+  using (public.es_encargado_del_frente(id));
+
 alter table public.partes_diarios enable row level security;
 
 drop policy if exists "partes_diarios_select" on public.partes_diarios;
