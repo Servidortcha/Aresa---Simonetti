@@ -6,6 +6,21 @@
 -- completo y ejecutalo.
 -- ============================================================
 
+-- Función auxiliar de rol (idempotente). En algunas bases la
+-- migración 0001 no la dejó creada; acá nos aseguramos.
+create or replace function public.es_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.perfiles
+    where id = auth.uid() and rol = 'admin'
+  );
+$$;
+
 -- Frentes de trabajo (escuadrillas externas)
 create table if not exists public.frentes_trabajo (
   id uuid primary key default gen_random_uuid(),
