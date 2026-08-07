@@ -25,6 +25,7 @@ const GROUPS = [
     items: [
       { href: "/trabajos", label: "Trabajos", roles: ["admin", "taller_stock"] },
       { href: "/taller", label: "Taller", roles: ["admin"] },
+      { href: "/fabricacion", label: "Fabricación", roles: ["admin"] },
       { href: "/partes-diarios", label: "Partes diarios", roles: ["admin", "encargado"] },
       { href: "/grua", label: "Grúa", roles: ["admin", "grua"] },
     ],

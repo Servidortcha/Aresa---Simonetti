@@ -24,10 +24,11 @@ export default function IngresoEgresoPage() {
   const [depositoSel, setDepositoSel] = useState("Principal");
   const [confirmacion, setConfirmacion] = useState(null);
   const [error, setError] = useState(null);
-  const [form, setForm] = useState({ insumoId: "", tipo: "entrada", cantidad: "", producto: "", nota: "" });
+  const [form, setForm] = useState({ insumoId: "", tipo: "entrada", cantidad: "", producto: "", nota: "", fabricacionId: "" });
   const [historial, setHistorial] = useState([]);
   const [historialLoading, setHistorialLoading] = useState(true);
   const [enviando, setEnviando] = useState(false);
+  const [fabricacionesAbiertas, setFabricacionesAbiertas] = useState([]);
 
   const insumosVisibles = esAdmin ? insumos.filter((i) => i.deposito === depositoSel) : insumos;
 
@@ -50,12 +51,18 @@ export default function IngresoEgresoPage() {
   }, [esAdmin, soloEgreso]);
 
   useEffect(() => {
+    setForm((f) => ({ ...f, insumoId: "" }));
+  }, [depositoSel]);
+
+  useEffect(() => {
     if (soloEgreso) setForm((f) => (f.tipo === "salida" ? f : { ...f, tipo: "salida" }));
   }, [soloEgreso]);
 
   useEffect(() => {
-    setForm((f) => ({ ...f, insumoId: "" }));
-  }, [depositoSel]);
+    supabase.from("fabricaciones").select("id, nombre").eq("estado", "abierta").order("fecha_apertura").then(({ data }) => {
+      setFabricacionesAbiertas(data || []);
+    });
+  }, []);
 
   useEffect(() => {
     async function load() {
@@ -93,15 +100,18 @@ export default function IngresoEgresoPage() {
 
     setEnviando(true);
 
+    const fabricacionSel = form.fabricacionId ? fabricacionesAbiertas.find((f) => String(f.id) === String(form.fabricacionId)) : null;
+
     // El RPC registra el movimiento y actualiza el stock en una sola
     // transacción en el servidor (valida stock y roles).
     const { data, error } = await supabase.rpc("registrar_movimiento_insumo", {
       p_insumo_id: insumo.id,
       p_tipo: form.tipo,
       p_cantidad: cant,
-      p_producto_texto: form.tipo === "salida" ? form.producto || null : null,
+      p_producto_texto: form.tipo === "salida" ? (fabricacionSel ? fabricacionSel.nombre : form.producto || null) : null,
       p_nota: form.nota || null,
       p_usuario_email: session?.user?.email || null,
+      p_fabricacion_id: form.tipo === "salida" && fabricacionSel ? fabricacionSel.id : null,
     });
 
     const resultado = data?.[0];
@@ -115,7 +125,7 @@ export default function IngresoEgresoPage() {
 
     setInsumos((prev) => prev.map((i) => (i.id === insumo.id ? { ...i, stock: nuevoStock } : i)));
     setConfirmacion(`${form.tipo === "entrada" ? "Entrada" : "Salida"} de ${cant} ${insumo.unidad} registrada para ${insumo.nombre}`);
-    setForm({ insumoId: "", tipo: "entrada", cantidad: "", producto: "", nota: "" });
+    setForm({ insumoId: "", tipo: "entrada", cantidad: "", producto: "", nota: "", fabricacionId: "" });
     setTimeout(() => setConfirmacion(null), 3500);
     cargarHistorial();
     setEnviando(false);
@@ -197,9 +207,24 @@ export default function IngresoEgresoPage() {
           </Field>
 
           {form.tipo === "salida" && (
-            <Field label="Usado en (producto)">
-              <input className={inputCls} value={form.producto} onChange={(e) => setForm({ ...form, producto: e.target.value })} placeholder="Ej. Panel solar tipo A" />
-            </Field>
+            <>
+              <Field label="Fabricación abierta (opcional)">
+                <select className={inputCls} value={form.fabricacionId} onChange={(e) => setForm({ ...form, fabricacionId: e.target.value })}>
+                  <option value="">— Sin vincular —</option>
+                  {fabricacionesAbiertas.map((f) => (
+                    <option key={f.id} value={f.id}>{f.nombre}</option>
+                  ))}
+                </select>
+                {fabricacionesAbiertas.length === 0 && (
+                  <p className="text-[10px] text-[#8A8578] mt-1">No hay fabricaciones abiertas.</p>
+                )}
+              </Field>
+              {!form.fabricacionId && (
+                <Field label="Usado en (producto)">
+                  <input className={inputCls} value={form.producto} onChange={(e) => setForm({ ...form, producto: e.target.value })} placeholder="Ej. Panel solar tipo A" />
+                </Field>
+              )}
+            </>
           )}
 
           <Field label={form.tipo === "salida" ? "Retirado por (nombre y apellido)" : "Nota (opcional)"}>

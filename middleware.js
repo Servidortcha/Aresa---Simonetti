@@ -8,6 +8,7 @@ function requiredRoles(pathname) {
   if (/^\/rrhh(\/|$)/.test(pathname)) return ["admin"];
   if (/^\/stock-panol(\/|$)/.test(pathname)) return ["admin"];
   if (/^\/taller(\/|$)/.test(pathname)) return ["admin"];
+  if (/^\/fabricacion(\/|$)/.test(pathname)) return ["admin"];
   if (/^\/organigrama(\/|$)/.test(pathname)) return ["admin"];
   if (/^\/grua(\/|$)/.test(pathname)) return ["admin", "grua"];
   if (/^\/partes-diarios(\/|$)/.test(pathname)) return ["admin", "encargado"];
