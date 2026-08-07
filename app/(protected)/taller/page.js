@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
 import { useAuth } from "../../../lib/AuthContext";
-import { Hammer, Download, Paperclip, X, FileText, ClipboardList, Plus, Trash2 } from "lucide-react";
+import { Hammer, Download, Paperclip, X, FileText, ClipboardList, Plus, Trash2, Pencil, Printer } from "lucide-react";
 
 const emptyForm = { cliente: "", cantidad: "", duracion_horas: "", cantidad_personas: "", descripcion_materiales: "" };
 
@@ -40,6 +40,10 @@ export default function TallerPage() {
   const [formItems, setFormItems] = useState([]);
   const [nuevoItemTrabajo, setNuevoItemTrabajo] = useState("");
   const [nuevoItemExterno, setNuevoItemExterno] = useState({ descripcion: "", cantidad: "", duracion: "" });
+  const [editandoId, setEditandoId] = useState(null);
+  const [archivosActuales, setArchivosActuales] = useState([]);
+  const [confirmarEliminar, setConfirmarEliminar] = useState(null);
+  const [tarjeta, setTarjeta] = useState(null);
 
   async function cargar() {
     setLoading(true);
@@ -130,13 +134,48 @@ export default function TallerPage() {
     setFormItems((prev) => prev.filter((i) => i.key !== key));
   }
 
+  function abrirNuevo() {
+    setEditandoId(null);
+    setForm(emptyForm);
+    setArchivosSeleccionados([]);
+    setArchivosActuales([]);
+    setFormItems([]);
+    setError(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function abrirEditar(r) {
+    setEditandoId(r.id);
+    setForm({
+      cliente: r.cliente || "",
+      cantidad: r.cantidad != null ? String(r.cantidad) : "",
+      duracion_horas: r.duracion_horas != null ? String(r.duracion_horas) : "",
+      cantidad_personas: r.cantidad_personas != null ? String(r.cantidad_personas) : "",
+      descripcion_materiales: r.descripcion_materiales || "",
+    });
+    setArchivosSeleccionados([]);
+    setArchivosActuales(r.archivos || []);
+    setFormItems(
+      (itemsPorTrabajo[r.id] || []).map((i) => ({
+        key: `saved-${i.id}`,
+        tipo: i.tipo,
+        trabajo_ref: i.trabajo_ref,
+        descripcion: i.descripcion,
+        cantidad: i.cantidad,
+        duracion: i.duracion_horas,
+      }))
+    );
+    setError(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   async function submit(e) {
     e.preventDefault();
     if (subiendo) return;
     setError(null);
     setSubiendo(true);
 
-    // 1. Subir cada archivo seleccionado a Supabase Storage
+    // 1. Subir cada archivo nuevo seleccionado a Supabase Storage
     const archivosSubidos = [];
     for (const file of archivosSeleccionados) {
       const nombreSeguro = file.name
@@ -153,31 +192,53 @@ export default function TallerPage() {
       archivosSubidos.push({ name: file.name, url: pub.publicUrl });
     }
 
-    // 2. Registrar el trabajo con los archivos ya subidos
-    const { data: nuevo, error } = await supabase
-      .from("taller_trabajos")
-      .insert({
-        cliente: form.cliente || null,
-        cantidad: form.cantidad ? Number(form.cantidad) : null,
-        duracion_horas: form.duracion_horas ? Number(form.duracion_horas) : null,
-        cantidad_personas: form.cantidad_personas ? Number(form.cantidad_personas) : null,
-        descripcion_materiales: form.descripcion_materiales || null,
-        archivos: archivosSubidos.length > 0 ? archivosSubidos : null,
-        usuario_email: session?.user?.email || null,
-      })
-      .select("id");
-    setSubiendo(false);
-    if (error) {
-      setError(error.message);
-      return;
+    const archivosFinales = [...archivosActuales, ...archivosSubidos];
+    const payload = {
+      cliente: form.cliente || null,
+      cantidad: form.cantidad ? Number(form.cantidad) : null,
+      duracion_horas: form.duracion_horas ? Number(form.duracion_horas) : null,
+      cantidad_personas: form.cantidad_personas ? Number(form.cantidad_personas) : null,
+      descripcion_materiales: form.descripcion_materiales || null,
+      archivos: archivosFinales.length > 0 ? archivosFinales : null,
+    };
+
+    let trabajoId;
+    if (editandoId) {
+      // 2a. Actualizar el trabajo existente
+      const { error } = await supabase.from("taller_trabajos").update(payload).eq("id", editandoId);
+      setSubiendo(false);
+      if (error) {
+        setError(error.message);
+        return;
+      }
+      trabajoId = editandoId;
+
+      // 2b. Reconciliar los anexados: se borran los actuales y se reinsertan los del formulario
+      const { error: delItems } = await supabase.from("taller_trabajo_items").delete().eq("taller_trabajo_id", editandoId);
+      if (delItems) {
+        setError(delItems.message);
+        cargar();
+        return;
+      }
+    } else {
+      // 2a. Registrar el trabajo nuevo con los archivos ya subidos
+      const { data: nuevo, error } = await supabase
+        .from("taller_trabajos")
+        .insert({ ...payload, usuario_email: session?.user?.email || null })
+        .select("id");
+      setSubiendo(false);
+      if (error) {
+        setError(error.message);
+        return;
+      }
+      trabajoId = nuevo?.[0]?.id;
     }
 
     // 3. Guardar los trabajos / ítems externos anexados en el formulario
-    const nuevoId = nuevo?.[0]?.id;
-    if (nuevoId && formItems.length > 0) {
+    if (trabajoId && formItems.length > 0) {
       const { error: itemsErr } = await supabase.from("taller_trabajo_items").insert(
         formItems.map((i) => ({
-          taller_trabajo_id: nuevoId,
+          taller_trabajo_id: trabajoId,
           tipo: i.tipo,
           trabajo_ref: i.tipo === "trabajo" ? i.trabajo_ref : null,
           descripcion: i.tipo === "externo" ? i.descripcion : null,
@@ -194,10 +255,42 @@ export default function TallerPage() {
 
     setForm(emptyForm);
     setArchivosSeleccionados([]);
+    setArchivosActuales([]);
     setFormItems([]);
-    setConfirmacion("Registro guardado");
+    setEditandoId(null);
+    setConfirmacion(editandoId ? "Cambios guardados" : "Registro guardado");
     setTimeout(() => setConfirmacion(null), 3000);
     cargar();
+  }
+
+  async function eliminarRegistro() {
+    if (!confirmarEliminar) return;
+    setAgregando(true);
+    const { error } = await supabase.from("taller_trabajos").delete().eq("id", confirmarEliminar.id);
+    setAgregando(false);
+    if (error) {
+      setError(error.message);
+      setConfirmarEliminar(null);
+      return;
+    }
+    setConfirmarEliminar(null);
+    setConfirmacion("Trabajo eliminado");
+    setTimeout(() => setConfirmacion(null), 2500);
+    cargar();
+  }
+
+  function imprimirTarjeta(r) {
+    setTarjeta(r);
+    const tituloOriginal = document.title;
+    const nombreCliente = (r.cliente || "sin-cliente").replace(/[^a-zA-Z0-9 _-]/g, "").trim().replace(/\s+/g, "-");
+    const fecha = new Date(r.fecha).toISOString().slice(0, 10);
+    document.title = `Taller-${nombreCliente}-${fecha}`;
+    function restaurarTitulo() {
+      document.title = tituloOriginal;
+      window.removeEventListener("afterprint", restaurarTitulo);
+    }
+    window.addEventListener("afterprint", restaurarTitulo);
+    setTimeout(() => window.print(), 100);
   }
 
   async function anexarTrabajo(e) {
@@ -304,6 +397,14 @@ export default function TallerPage() {
 
       <div className="flex flex-col gap-6">
         <form onSubmit={submit} className="bg-white border border-line rounded-sm p-4 sm:p-6 w-full max-w-2xl">
+          {editandoId && (
+            <div className="flex items-center justify-between bg-[#F2EEE3] border border-line rounded-sm px-3 py-2 mb-4 text-xs text-[#6B6558]">
+              Editando trabajo existente
+              <button type="button" onClick={abrirNuevo} className="text-[#3B5166] hover:underline flex items-center gap-1">
+                <X size={13} /> Cancelar edición
+              </button>
+            </div>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
             <Field label="Cliente">
               <input className={inputCls} value={form.cliente} onChange={(e) => setForm({ ...form, cliente: e.target.value })} placeholder="Ej. Simonetti Montajes" />
@@ -337,8 +438,16 @@ export default function TallerPage() {
               Elegir archivos
               <input type="file" multiple className="hidden" onChange={agregarArchivos} />
             </label>
-            {archivosSeleccionados.length > 0 && (
+            {(archivosActuales.length > 0 || archivosSeleccionados.length > 0) && (
               <ul className="mt-2 space-y-1">
+                {archivosActuales.map((a, idx) => (
+                  <li key={`a${idx}`} className="flex items-center justify-between bg-[#F2EEE3] rounded-sm px-2.5 py-1.5 text-xs text-[#4A463D]">
+                    <span className="truncate pr-2">{a.name}</span>
+                    <button type="button" onClick={() => setArchivosActuales((prev) => prev.filter((_, i) => i !== idx))} className="text-[#8A8578] hover:text-red flex-shrink-0">
+                      <X size={13} />
+                    </button>
+                  </li>
+                ))}
                 {archivosSeleccionados.map((f, idx) => (
                   <li key={idx} className="flex items-center justify-between bg-[#F2EEE3] rounded-sm px-2.5 py-1.5 text-xs text-[#4A463D]">
                     <span className="truncate pr-2">{f.name}</span>
@@ -432,7 +541,7 @@ export default function TallerPage() {
           </div>
 
           <button type="submit" disabled={subiendo} className="w-full mt-2 bg-ink text-paper py-2.5 rounded-sm text-sm font-medium hover:bg-[#333731] disabled:opacity-60">
-            {subiendo ? "Subiendo..." : "Registrar"}
+            {subiendo ? "Guardando..." : editandoId ? "Guardar cambios" : "Registrar"}
           </button>
         </form>
 
@@ -466,13 +575,24 @@ export default function TallerPage() {
                     </span>
                     <span className="text-xs text-[#8A8578]">{(r.archivos || []).length} archivo{(r.archivos || []).length !== 1 ? "s" : ""} · {(itemsPorTrabajo[r.id] || []).length} trabajo{(itemsPorTrabajo[r.id] || []).length !== 1 ? "s" : ""}</span>
                   </button>
+                  <div className="flex items-center gap-2 mt-2">
+                    <button onClick={() => abrirEditar(r)} className="flex items-center gap-1.5 px-3 py-2 border border-line rounded-sm text-sm font-medium text-ink">
+                      <Pencil size={15} /> Editar
+                    </button>
+                    <button onClick={() => imprimirTarjeta(r)} className="flex items-center gap-1.5 px-3 py-2 border border-line rounded-sm text-sm font-medium text-ink">
+                      <Printer size={15} /> Imprimir
+                    </button>
+                    <button onClick={() => setConfirmarEliminar(r)} className="flex items-center gap-1.5 px-3 py-2 border border-line rounded-sm text-sm font-medium text-[#C7522A]">
+                      <Trash2 size={15} /> Eliminar
+                    </button>
+                  </div>
                 </div>
               ))}
             {!loading && registros.length === 0 && <p className="text-center text-sm text-[#8A8578] py-8">Aún no hay registros de Taller</p>}
           </div>
 
           <div className="hidden sm:block bg-white border border-line rounded-sm overflow-x-auto w-full">
-            <table className="w-full text-sm min-w-[840px]">
+            <table className="w-full text-sm min-w-[960px]">
               <thead>
                 <tr className="text-left text-xs uppercase text-[#6B6558] border-b border-line">
                   <th className="px-4 py-3 font-medium">Fecha</th>
@@ -483,10 +603,11 @@ export default function TallerPage() {
                   <th className="px-4 py-3 font-medium">Materiales</th>
                   <th className="px-4 py-3 font-medium">Trabajos</th>
                   <th className="px-4 py-3 font-medium">Archivos</th>
+                  <th className="px-4 py-3 font-medium text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody>
-                {loading && <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-[#8A8578]">Cargando...</td></tr>}
+                {loading && <tr><td colSpan={9} className="px-4 py-8 text-center text-sm text-[#8A8578]">Cargando...</td></tr>}
                 {!loading && registros.map((r, idx) => (
                   <tr key={r.id} className={`${idx % 2 === 1 ? "bg-[#F7F4EC]" : ""} ${idx !== registros.length - 1 ? "border-b border-[#EFEBE0]" : ""}`}>
                     <td className="px-4 py-3 text-[#6B6558] font-mono whitespace-nowrap">{new Date(r.fecha).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}</td>
@@ -514,10 +635,23 @@ export default function TallerPage() {
                         </button>
                       ) : "—"}
                     </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-3">
+                        <button onClick={() => abrirEditar(r)} className="text-[#4A4B4D] hover:opacity-70" title="Editar">
+                          <Pencil size={15} />
+                        </button>
+                        <button onClick={() => imprimirTarjeta(r)} className="text-[#4A4B4D] hover:opacity-70" title="Imprimir tarjeta">
+                          <Printer size={15} />
+                        </button>
+                        <button onClick={() => setConfirmarEliminar(r)} className="text-[#C7522A] hover:text-red" title="Eliminar">
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
                 {!loading && registros.length === 0 && (
-                  <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-[#8A8578]">Aún no hay registros de Taller</td></tr>
+                  <tr><td colSpan={9} className="px-4 py-8 text-center text-sm text-[#8A8578]">Aún no hay registros de Taller</td></tr>
                 )}
               </tbody>
             </table>
@@ -625,6 +759,59 @@ export default function TallerPage() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {confirmarEliminar && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setConfirmarEliminar(null)}>
+          <div className="bg-card w-full max-w-sm rounded-sm border border-line shadow-2xl p-5" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-display text-xl font-semibold mb-2">Eliminar trabajo de Taller</h3>
+            <p className="text-sm text-[#4A463D] mb-4">
+              ¿Eliminar el trabajo de <b>{confirmarEliminar.cliente || "sin cliente"}</b> del{" "}
+              {new Date(confirmarEliminar.fecha).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}? También se quitan sus trabajos anexados.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setConfirmarEliminar(null)} className="px-4 py-2 border border-line rounded-sm text-sm text-ink hover:bg-[#F2EEE3]">
+                Cancelar
+              </button>
+              <button onClick={eliminarRegistro} disabled={agregando} className="px-4 py-2 bg-[#C7522A] text-white rounded-sm text-sm font-medium hover:bg-red disabled:opacity-60">
+                {agregando ? "…" : "Eliminar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tarjeta && (
+        <div className="print-card hidden">
+          <div className="pc-header">
+            <div className="pc-empresa">Simonetti Montajes Industriales</div>
+            <div className="pc-tipo">Taller</div>
+          </div>
+          <table className="pc-tabla">
+            <tbody>
+              <tr><td className="pc-label">Fecha</td><td>{new Date(tarjeta.fecha).toLocaleString("es-MX", { dateStyle: "long", timeStyle: "short" })}</td></tr>
+              <tr><td className="pc-label">Cliente</td><td>{tarjeta.cliente || "—"}</td></tr>
+              <tr><td className="pc-label">Cantidad</td><td>{tarjeta.cantidad ?? "—"}</td></tr>
+              <tr><td className="pc-label">Duración</td><td>{tarjeta.duracion_horas != null ? `${tarjeta.duracion_horas} h` : "—"}</td></tr>
+              <tr><td className="pc-label">Personas</td><td>{tarjeta.cantidad_personas ?? "—"}</td></tr>
+              <tr><td className="pc-label">Materiales</td><td style={{ whiteSpace: "pre-wrap" }}>{tarjeta.descripcion_materiales || "—"}</td></tr>
+              <tr>
+                <td className="pc-label">Trabajos anexados</td>
+                <td>
+                  {(itemsPorTrabajo[tarjeta.id] || []).length > 0 ? (
+                    (itemsPorTrabajo[tarjeta.id] || []).map((i, idx) => (
+                      <div key={idx}>
+                        {i.tipo === "trabajo" ? i.refNombre : `${i.descripcion}${i.cantidad ? ` (x${i.cantidad})` : ""}${i.duracion_horas ? ` · ${i.duracion_horas} h` : ""}`}
+                      </div>
+                    ))
+                  ) : "—"}
+                </td>
+              </tr>
+              <tr><td className="pc-label">Registrado por</td><td>{tarjeta.usuario_email || "—"}</td></tr>
+            </tbody>
+          </table>
+          <div className="pc-footer">Powered by Aresa</div>
         </div>
       )}
     </>
