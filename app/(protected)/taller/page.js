@@ -356,11 +356,10 @@ export default function TallerPage() {
                       ) : "—"}
                     </td>
                     <td className="px-4 py-3">
-                      {(itemsPorTrabajo[r.id] || []).length > 0 ? (
-                        <button onClick={() => setVerDetalle(r)} className="inline-flex items-center gap-1 text-xs text-[#3B5166] hover:underline">
-                          <ClipboardList size={13} /> {(itemsPorTrabajo[r.id] || []).length}
-                        </button>
-                      ) : "—"}
+                      <button onClick={() => setVerDetalle(r)} className="inline-flex items-center gap-1 text-xs text-[#3B5166] hover:underline">
+                        <ClipboardList size={13} />
+                        {(itemsPorTrabajo[r.id] || []).length > 0 ? (itemsPorTrabajo[r.id] || []).length : "Agregar"}
+                      </button>
                     </td>
                     <td className="px-4 py-3">
                       {r.archivos && r.archivos.length > 0 ? (
@@ -439,6 +438,11 @@ export default function TallerPage() {
                   <Plus size={15} /> {agregando ? "…" : "Anexar"}
                 </button>
               </form>
+              {trabajos.length === 0 && (
+                <p className="text-xs text-[#C7522A] mb-3">
+                  No hay trabajos de corte/tornería cargados en el módulo <b>Trabajos</b> — cargá uno ahí para poder anexarlo.
+                </p>
+              )}
 
               <form onSubmit={anexarExterno} className="pt-3 border-t border-[#EFEBE0]">
                 <div className="flex items-end gap-2">
