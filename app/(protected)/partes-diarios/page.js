@@ -405,18 +405,13 @@ export default function PartesDiariosPage() {
                       )}
                       {horas.map((h, idx) => (
                         <div key={idx} className="flex items-center gap-2">
-                          <select
+                          <input
                             className={inputCls}
+                            list="personal-sector"
                             value={h.nombre}
                             onChange={(e) => setHoras((prev) => prev.map((x, i) => (i === idx ? { ...x, nombre: e.target.value } : x)))}
-                          >
-                            <option value="">— Elegí un operario —</option>
-                            {(personasPorFrente[frenteId] || []).map((n, i) => (
-                              <option key={i} value={n}>
-                                {n}
-                              </option>
-                            ))}
-                          </select>
+                            placeholder="Elegí o escribí el nombre"
+                          />
                           <input
                             type="number"
                             step="0.5"
@@ -436,6 +431,14 @@ export default function PartesDiariosPage() {
                           </button>
                         </div>
                       ))}
+                      <datalist id="personal-sector">
+                        {(personasPorFrente[frenteId] || []).map((n, i) => (
+                          <option key={i} value={n} />
+                        ))}
+                      </datalist>
+                      <div className="text-[10px] text-[#A79A78] break-all">
+                        DEBUG: personas={JSON.stringify(personasPorFrente[frenteId])}
+                      </div>
                       <button
                         type="button"
                         onClick={() => setHoras((prev) => [...prev, { nombre: "", horas: "" }])}
