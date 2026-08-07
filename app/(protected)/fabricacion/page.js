@@ -19,17 +19,34 @@ function Field({ label, children }) {
 
 const vacioAbrir = { nombre: "", cliente: "", descripcion: "" };
 
-function formatearTiempo(f) {
-  if (!f.fecha_cierre) return "—";
-  const diff = new Date(f.fecha_cierre) - new Date(f.fecha_apertura);
-  if (diff < 0) return "—";
-  const minutos = Math.floor(diff / 60000);
+const HORAS_POR_DIA = 11;
+
+function diffMs(apertura, cierre) {
+  const fin = cierre ? new Date(cierre).getTime() : Date.now();
+  return fin - new Date(apertura).getTime();
+}
+
+function formatearTiempo(apertura, cierre) {
+  const ms = diffMs(apertura, cierre);
+  if (ms < 0) return "—";
+  const minutos = Math.floor(ms / 60000);
   const dias = Math.floor(minutos / 1440);
   const horas = Math.floor((minutos % 1440) / 60);
   const mins = minutos % 60;
   if (dias > 0) return `${dias} día${dias !== 1 ? "s" : ""} ${horas} h ${mins} min`;
   if (horas > 0) return `${horas} h ${mins} min`;
   return `${mins} min`;
+}
+
+function formatearHorasHombre(apertura, cierre) {
+  const ms = diffMs(apertura, cierre);
+  if (ms < 0) return "—";
+  const horas = (ms / 3600000) * (HORAS_POR_DIA / 24);
+  const horasEnteras = Math.floor(horas);
+  const minutos = Math.round((horas - horasEnteras) * 60);
+  if (horasEnteras === 0) return `${minutos} min`;
+  if (minutos === 0) return `${horasEnteras} h`;
+  return `${horasEnteras} h ${minutos} min`;
 }
 
 function FormAgregarInsumo({ fabricacionId, insumos, subiendo, onAgregar }) {
@@ -128,6 +145,7 @@ export default function FabricacionPage() {
   const [nuevoEdit, setNuevoEdit] = useState({ insumo_id: "", cantidad: "" });
   const [guardando, setGuardando] = useState(false);
   const [confirmarEliminar, setConfirmarEliminar] = useState(null);
+  const [, setAhora] = useState(Date.now());
 
   const abiertas = fabricaciones.filter((f) => f.estado === "abierta");
   const cerradas = fabricaciones.filter((f) => f.estado === "cerrada");
@@ -184,6 +202,11 @@ export default function FabricacionPage() {
 
   useEffect(() => {
     cargar();
+  }, []);
+
+  useEffect(() => {
+    const id = setInterval(() => setAhora(Date.now()), 60000);
+    return () => clearInterval(id);
   }, []);
 
   useEffect(() => {
@@ -482,7 +505,8 @@ export default function FabricacionPage() {
       linea("Cliente:", f.cliente || "—");
       linea("Fecha apertura:", new Date(f.fecha_apertura).toLocaleString("es-MX"));
       linea("Fecha cierre:", f.fecha_cierre ? new Date(f.fecha_cierre).toLocaleString("es-MX") : "—");
-      linea("Tiempo:", formatearTiempo(f));
+      linea(`Hora hombre (${HORAS_POR_DIA} h/día):`, formatearHorasHombre(f.fecha_apertura, f.fecha_cierre));
+      linea("Tiempo transcurrido:", formatearTiempo(f.fecha_apertura, f.fecha_cierre));
       linea("Total unidades usadas:", total);
       y += 2;
 
@@ -591,6 +615,10 @@ export default function FabricacionPage() {
 
         {f.estado === "abierta" && (
           <>
+            <div className="flex items-center gap-1.5 text-xs text-[#8A8578] mt-2">
+              <CalendarClock size={13} /> Hora hombre: <span className="font-medium text-[#4A463D]">{formatearHorasHombre(f.fecha_apertura, null)}</span>
+              <span className="text-[#B0AA9A]">({HORAS_POR_DIA} h/día)</span>
+            </div>
             <div className="mt-3 pt-3 border-t border-[#EFEBE0]">
               <p className="text-[10px] uppercase tracking-wide text-[#8A8578] mb-1.5">Estimado de insumos a usar</p>
               {estimadosF.length === 0 && <p className="text-xs text-[#8A8578] mb-2">Todavía no cargaste el estimado.</p>}
@@ -631,10 +659,14 @@ export default function FabricacionPage() {
 
         {f.estado === "cerrada" && (
           <>
-            <div className="flex items-center gap-1.5 text-xs text-[#8A8578] mt-3">
-              <CalendarClock size={13} /> Tiempo: <span className="font-medium text-[#4A463D]">{formatearTiempo(f)}</span>
-              <span className="mx-1 text-[#D8D2C4]">·</span>
-              Cerrada el {new Date(f.fecha_cierre).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}
+            <div className="text-xs text-[#8A8578] mt-3 flex flex-col gap-0.5">
+              <div className="flex items-center gap-1.5">
+                <CalendarClock size={13} /> Tiempo: <span className="font-medium text-[#4A463D]">{formatearHorasHombre(f.fecha_apertura, f.fecha_cierre)}</span>
+                <span className="text-[#B0AA9A]">(hora hombre · {HORAS_POR_DIA} h/día)</span>
+              </div>
+              <div className="flex items-center gap-1.5 pl-[22px]">
+                Transcurrido {formatearTiempo(f.fecha_apertura, f.fecha_cierre)} · Cerrada el {new Date(f.fecha_cierre).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}
+              </div>
             </div>
             <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-[#EFEBE0]">
               <button
