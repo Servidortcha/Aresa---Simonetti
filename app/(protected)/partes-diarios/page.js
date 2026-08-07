@@ -246,6 +246,7 @@ export default function PartesDiariosPage() {
             <h1 className="font-display text-3xl font-semibold">Partes diarios</h1>
             <p className="text-sm text-[#6B6558] mt-0.5">{esAdmin ? "Todos los frentes" : "Tu frente"}</p>
           </div>
+          <span className="ml-1 text-[10px] font-mono bg-[#EAF0F5] text-[#2E6F9E] px-1.5 py-0.5 rounded-sm">v7</span>
         </div>
         <button onClick={abrirNuevo} className="flex items-center gap-1.5 bg-ink text-paper px-4 py-2 rounded-sm text-sm font-medium hover:bg-[#333731] transition-colors">
           <Plus size={16} /> Nuevo parte
@@ -404,12 +405,18 @@ export default function PartesDiariosPage() {
                       )}
                       {horas.map((h, idx) => (
                         <div key={idx} className="flex items-center gap-2">
-                          <input
+                          <select
                             className={inputCls}
                             value={h.nombre}
                             onChange={(e) => setHoras((prev) => prev.map((x, i) => (i === idx ? { ...x, nombre: e.target.value } : x)))}
-                            placeholder="Nombre"
-                          />
+                          >
+                            <option value="">— Elegí un operario —</option>
+                            {(personasPorFrente[frenteId] || []).map((n, i) => (
+                              <option key={i} value={n}>
+                                {n}
+                              </option>
+                            ))}
+                          </select>
                           <input
                             type="number"
                             step="0.5"
