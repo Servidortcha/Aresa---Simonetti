@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
 import { useAuth } from "../../../lib/AuthContext";
-import { Factory, Plus, CheckCircle2, Lock, Boxes, CalendarClock, Download, Pencil, Trash2, Save, X, AlertTriangle } from "lucide-react";
+import { Factory, Plus, CheckCircle2, Lock, Boxes, CalendarClock, Download, Pencil, Trash2, Save, X, AlertTriangle, ClipboardList } from "lucide-react";
 
 const inputCls = "w-full px-3 py-2 bg-white border border-line rounded-sm text-sm text-ink focus:outline-none focus:ring-2 focus:ring-green focus:border-transparent";
 
@@ -71,6 +71,43 @@ function FormAgregarInsumo({ fabricacionId, insumos, subiendo, onAgregar }) {
   );
 }
 
+function FormAgregarEstimado({ fabricacionId, insumos, subiendo, onAgregar }) {
+  const [insumoId, setInsumoId] = useState("");
+  const [cantidad, setCantidad] = useState("");
+
+  function enviar(e) {
+    e.preventDefault();
+    onAgregar(fabricacionId, insumoId, cantidad);
+  }
+
+  return (
+    <form onSubmit={enviar} className="flex items-end gap-2">
+      <label className="block flex-1 min-w-0">
+        <span className="block text-[10px] uppercase tracking-wide text-[#8A8578] mb-1">Agregar al estimado</span>
+        <select className={inputCls} value={insumoId} onChange={(e) => setInsumoId(e.target.value)}>
+          <option value="">— Elegir —</option>
+          {insumos.map((i) => (
+            <option key={i.id} value={i.id}>
+              {i.nombre} ({i.unidad || "u"}) — stock: {i.stock}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="block w-20 shrink-0">
+        <span className="block text-[10px] uppercase tracking-wide text-[#8A8578] mb-1">Cant.</span>
+        <input type="number" step="0.01" min="0" className={inputCls} value={cantidad} onChange={(e) => setCantidad(e.target.value)} />
+      </label>
+      <button
+        type="submit"
+        disabled={subiendo}
+        className="inline-flex items-center gap-1 bg-white border border-line text-ink px-3 py-2 rounded-sm text-sm font-medium hover:bg-[#F2EEE3] disabled:opacity-60 shrink-0"
+      >
+        <ClipboardList size={14} /> {subiendo ? "..." : "Agregar"}
+      </button>
+    </form>
+  );
+}
+
 export default function FabricacionPage() {
   const { rol, session } = useAuth();
   const router = useRouter();
@@ -78,6 +115,7 @@ export default function FabricacionPage() {
   const [fabricaciones, setFabricaciones] = useState([]);
   const [insumos, setInsumos] = useState([]);
   const [insumosPorFabricacion, setInsumosPorFabricacion] = useState({});
+  const [estimadosPorFabricacion, setEstimadosPorFabricacion] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [confirmacion, setConfirmacion] = useState(null);
@@ -96,10 +134,11 @@ export default function FabricacionPage() {
 
   async function cargar() {
     setLoading(true);
-    const [{ data: fac, error: ef }, { data: ins, error: ei }, { data: fis, error: efi }] = await Promise.all([
+    const [{ data: fac, error: ef }, { data: ins, error: ei }, { data: fis, error: efi }, { data: est, error: eest }] = await Promise.all([
       supabase.from("fabricaciones").select("*").order("fecha_apertura", { ascending: false }),
       supabase.from("insumos").select("id, nombre, unidad, stock, deposito").eq("activo", true).order("nombre"),
       supabase.from("fabricacion_insumos").select("id, fabricacion_id, insumo_id, cantidad, fecha"),
+      supabase.from("fabricacion_estimados").select("id, fabricacion_id, insumo_id, cantidad"),
     ]);
     if (ef) setError(ef.message);
     else setFabricaciones(fac || []);
@@ -122,6 +161,22 @@ export default function FabricacionPage() {
       setInsumosPorFabricacion(mapa);
     } else {
       setError(efi.message);
+    }
+    const estMap = {};
+    if (!eest) {
+      (est || []).forEach((fila) => {
+        const insumo = (ins || []).find((i) => i.id === fila.insumo_id);
+        if (!insumo) return;
+        (estMap[fila.fabricacion_id] = estMap[fila.fabricacion_id] || []).push({
+          id: fila.id,
+          nombre: insumo.nombre,
+          unidad: insumo.unidad || "u",
+          cantidad: fila.cantidad,
+        });
+      });
+      setEstimadosPorFabricacion(estMap);
+    } else {
+      setError(eest.message);
     }
     setLoading(false);
     return mapa;
@@ -221,6 +276,56 @@ export default function FabricacionPage() {
     setInsumosEdit(insumosPorFabricacion[f.id] || []);
     setNuevoEdit({ insumo_id: "", cantidad: "" });
     setError(null);
+  }
+
+  async function agregarEstimado(fabricacionId, insumoId, cantidad) {
+    setError(null);
+    if (!insumoId) {
+      setError("Elegí un insumo para el estimado.");
+      return;
+    }
+    const cant = Number(cantidad);
+    if (!cant || cant <= 0) {
+      setError("La cantidad del estimado tiene que ser mayor a 0.");
+      return;
+    }
+    const { error: err } = await supabase.from("fabricacion_estimados").insert({
+      fabricacion_id: Number(fabricacionId),
+      insumo_id: Number(insumoId),
+      cantidad: cant,
+      usuario_email: session?.user?.email || null,
+    });
+    if (err) {
+      setError(err.message);
+      return;
+    }
+    mostrarMensaje("Estimado agregado");
+    cargar();
+  }
+
+  async function cambiarEstimado(filaId, cantidad) {
+    setError(null);
+    const cant = Number(cantidad);
+    if (!cant || cant <= 0) {
+      setError("La cantidad del estimado tiene que ser mayor a 0.");
+      return;
+    }
+    const { error: err } = await supabase.from("fabricacion_estimados").update({ cantidad: cant }).eq("id", filaId);
+    if (err) {
+      setError(err.message);
+      return;
+    }
+    cargar();
+  }
+
+  async function quitarEstimado(filaId) {
+    setError(null);
+    const { error: err } = await supabase.from("fabricacion_estimados").delete().eq("id", filaId);
+    if (err) {
+      setError(err.message);
+      return;
+    }
+    cargar();
   }
 
   async function guardarMetadatos(e) {
@@ -342,32 +447,104 @@ export default function FabricacionPage() {
     cargar();
   }
 
-  async function exportarResumen(f) {
-    const XLSX = await import("xlsx");
-    const insumosF = insumosPorFabricacion[f.id] || [];
-    const total = insumosF.reduce((acc, x) => acc + x.cantidad, 0);
-    const filasResumen = [
-      ["FABRICACIÓN", f.nombre],
-      ["Cliente", f.cliente || ""],
-      ["Descripción", f.descripcion || ""],
-      ["Fecha apertura", new Date(f.fecha_apertura).toLocaleString("es-MX")],
-      ["Fecha cierre", f.fecha_cierre ? new Date(f.fecha_cierre).toLocaleString("es-MX") : ""],
-      ["Tiempo", formatearTiempo(f)],
-      ["Insumos distintos", insumosF.length],
-      ["Total unidades usadas", total],
-    ];
-    const filasInsumos = insumosF.map((i) => [i.nombre, i.unidad, i.cantidad]);
-    const libro = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(libro, XLSX.utils.aoa_to_sheet(filasResumen), "Resumen");
-    XLSX.utils.book_append_sheet(libro, XLSX.utils.aoa_to_sheet([["Insumo", "Unidad", "Cantidad"], ...filasInsumos]), "Insumos");
-    const nombreArchivo = `fabricacion-${f.nombre.toLowerCase().replace(/[^a-z0-9]+/g, "-") || "obra"}.xlsx`;
-    XLSX.writeFile(libro, nombreArchivo);
+  async function exportarPDF(f) {
+    setSubiendo(true);
+    try {
+      const { default: jsPDF } = await import("jspdf");
+      const { default: autoTable } = await import("jspdf-autotable");
+
+      const insumosF = insumosPorFabricacion[f.id] || [];
+      const estimadosF = estimadosPorFabricacion[f.id] || [];
+      const total = insumosF.reduce((acc, x) => acc + x.cantidad, 0);
+
+      const doc = new jsPDF();
+
+      doc.setFillColor(244, 121, 30);
+      doc.rect(0, 0, doc.internal.pageSize.getWidth(), 28, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(16);
+      doc.setFont("helvetica", "bold");
+      doc.text("Resumen de Fabricación", 14, 12);
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "normal");
+      doc.text(f.nombre, 14, 20);
+
+      doc.setTextColor(30, 30, 30);
+      let y = 40;
+      const linea = (label, valor) => {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(10);
+        doc.text(label, 14, y);
+        doc.setFont("helvetica", "normal");
+        doc.text(String(valor ?? ""), 65, y);
+        y += 6.5;
+      };
+      linea("Cliente:", f.cliente || "—");
+      linea("Fecha apertura:", new Date(f.fecha_apertura).toLocaleString("es-MX"));
+      linea("Fecha cierre:", f.fecha_cierre ? new Date(f.fecha_cierre).toLocaleString("es-MX") : "—");
+      linea("Tiempo:", formatearTiempo(f));
+      linea("Total unidades usadas:", total);
+      y += 2;
+
+      if (f.descripcion) {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(10);
+        doc.text("Descripción:", 14, y);
+        y += 5;
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9.5);
+        const lineasDesc = doc.splitTextToSize(f.descripcion, 180);
+        doc.text(lineasDesc, 14, y);
+        y += lineasDesc.length * 5 + 4;
+      }
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.setTextColor(244, 121, 30);
+      doc.text("Insumos usados", 14, y + 4);
+      autoTable(doc, {
+        startY: y + 8,
+        head: [["Insumo", "Unidad", "Cantidad"]],
+        body: insumosF.length
+          ? insumosF.map((i) => [i.nombre, i.unidad, String(i.cantidad)])
+          : [["Sin insumos cargados", "", ""]],
+        styles: { fontSize: 9.5 },
+        headStyles: { fillColor: [60, 60, 60] },
+        theme: "striped",
+        margin: { left: 14, right: 14 },
+      });
+
+      if (estimadosF.length > 0) {
+        const ultimoY = doc.lastAutoTable.finalY + 12;
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(12);
+        doc.setTextColor(244, 121, 30);
+        doc.text("Estimado de insumos a usar", 14, ultimoY);
+        autoTable(doc, {
+          startY: ultimoY + 4,
+          head: [["Insumo", "Unidad", "Cantidad"]],
+          body: estimadosF.map((i) => [i.nombre, i.unidad, String(i.cantidad)]),
+          styles: { fontSize: 9.5 },
+          headStyles: { fillColor: [60, 60, 60] },
+          theme: "striped",
+          margin: { left: 14, right: 14 },
+        });
+      }
+
+      const nombreArchivo = `fabricacion-${f.nombre.toLowerCase().replace(/[^a-z0-9]+/g, "-") || "obra"}.pdf`;
+      doc.save(nombreArchivo);
+    } catch (err) {
+      setError("Error al generar el PDF: " + err.message);
+    } finally {
+      setSubiendo(false);
+    }
   }
 
   if (rol && rol !== "admin") return null;
 
   function Tarjeta({ f }) {
     const insumosF = insumosPorFabricacion[f.id] || [];
+    const estimadosF = estimadosPorFabricacion[f.id] || [];
     const total = insumosF.reduce((acc, x) => acc + x.cantidad, 0);
     return (
       <div className="bg-white border border-line rounded-sm p-4 flex flex-col">
@@ -414,6 +591,33 @@ export default function FabricacionPage() {
 
         {f.estado === "abierta" && (
           <>
+            <div className="mt-3 pt-3 border-t border-[#EFEBE0]">
+              <p className="text-[10px] uppercase tracking-wide text-[#8A8578] mb-1.5">Estimado de insumos a usar</p>
+              {estimadosF.length === 0 && <p className="text-xs text-[#8A8578] mb-2">Todavía no cargaste el estimado.</p>}
+              <ul className="space-y-1.5 mb-2">
+                {estimadosF.map((est) => (
+                  <li key={est.id} className="flex items-center gap-2 text-sm">
+                    <span className="flex items-center gap-1.5 text-[#4A463D] min-w-0 flex-1 truncate">
+                      <ClipboardList size={13} className="shrink-0 text-[#8A8578]" />
+                      <span className="truncate">{est.nombre}</span>
+                    </span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      defaultValue={est.cantidad}
+                      onBlur={(e) => Number(e.target.value) !== Number(est.cantidad) && cambiarEstimado(est.id, e.target.value)}
+                      className="w-20 text-center px-2 py-1 bg-white border border-line rounded-sm text-sm"
+                    />
+                    <span className="text-xs text-[#8A8578] w-10">{est.unidad}</span>
+                    <button onClick={() => quitarEstimado(est.id)} className="text-[#C7522A] hover:text-red p-0.5 shrink-0" title="Quitar del estimado">
+                      <Trash2 size={14} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <FormAgregarEstimado fabricacionId={f.id} insumos={insumos} subiendo={subiendo} onAgregar={agregarEstimado} />
+            </div>
             <FormAgregarInsumo fabricacionId={f.id} insumos={insumos} subiendo={subiendo} onAgregar={agregarInsumo} />
             <button
               onClick={() => cerrar(f.id)}
@@ -434,10 +638,11 @@ export default function FabricacionPage() {
             </div>
             <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-[#EFEBE0]">
               <button
-                onClick={() => exportarResumen(f)}
-                className="inline-flex items-center justify-center gap-1.5 bg-ink text-paper px-2 py-2 rounded-sm text-xs font-medium hover:bg-[#333731]"
+                onClick={() => exportarPDF(f)}
+                disabled={subiendo}
+                className="inline-flex items-center justify-center gap-1.5 bg-ink text-paper px-2 py-2 rounded-sm text-xs font-medium hover:bg-[#333731] disabled:opacity-60"
               >
-                <Download size={14} /> Resumen
+                <Download size={14} /> {subiendo ? "..." : "PDF"}
               </button>
               <button
                 onClick={() => abrirEditar(f)}
