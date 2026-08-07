@@ -8,7 +8,7 @@
 
 create table if not exists public.taller_trabajo_insumos (
   id uuid primary key default gen_random_uuid(),
-  trabajo_id uuid not null references public.taller_trabajos(id) on delete cascade,
+  trabajo_id bigint not null references public.taller_trabajos(id) on delete cascade,
   insumo_id bigint not null references public.insumos(id),
   cantidad numeric not null default 1,
   created_at timestamptz not null default now()
