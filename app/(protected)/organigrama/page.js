@@ -215,7 +215,7 @@ function OrganigramaInner() {
     const [resFrentes, resPersonas, resEmpleados] = await Promise.all([
       supabase.from("frentes_trabajo").select("id, nombre, encargado_user_id").order("nombre"),
       supabase.from("frente_personas").select("id, frente_id, nombre, rol").order("created_at"),
-      supabase.from("empleados").select("id, apellido, nombre").eq("activo", true).order("apellido"),
+      supabase.from("empleados").select("id, apellido, nombre, activo").order("apellido"),
     ]);
     if (resFrentes.error) {
       setStatus({ msg: "No se pudo cargar el organigrama: " + resFrentes.error.message, error: true });
@@ -228,7 +228,7 @@ function OrganigramaInner() {
         }))
       );
     }
-    if (!resEmpleados.error) setOperarios(resEmpleados.data || []);
+    if (!resEmpleados.error) setOperarios((resEmpleados.data || []).filter((o) => o.activo !== false));
     setLoading(false);
   }
 
