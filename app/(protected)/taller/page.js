@@ -49,7 +49,7 @@ export default function TallerPage() {
     setLoading(true);
     const [{ data, error }, { data: trab, error: errTrab }, { data: items, error: errItems }] = await Promise.all([
       supabase.from("taller_trabajos").select("*").order("fecha", { ascending: false }),
-      supabase.from("trabajos").select("id, tipo, cliente, descripcion, cantidad, duracion_minutos, duracion_horas, material, confirmado").order("fecha", { ascending: false }),
+      supabase.from("trabajos").select("id, tipo, cliente, descripcion, cantidad, duracion_minutos, duracion_horas, material, largo_mm, ancho_mm, metros_cuadrados, confirmado").order("fecha", { ascending: false }),
       supabase.from("taller_trabajo_items").select("id, taller_trabajo_id, tipo, trabajo_ref, descripcion, cantidad, duracion_horas"),
     ]);
     if (error) setError(error.message);
@@ -800,11 +800,41 @@ export default function TallerPage() {
                 <td className="pc-label">Trabajos anexados</td>
                 <td>
                   {(itemsPorTrabajo[tarjeta.id] || []).length > 0 ? (
-                    (itemsPorTrabajo[tarjeta.id] || []).map((i, idx) => (
-                      <div key={idx}>
-                        {i.tipo === "trabajo" ? i.refNombre : `${i.descripcion}${i.cantidad ? ` (x${i.cantidad})` : ""}${i.duracion_horas ? ` · ${i.duracion_horas} h` : ""}`}
-                      </div>
-                    ))
+                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                      {(itemsPorTrabajo[tarjeta.id] || []).map((i, idx) => {
+                        const t = i.tipo === "trabajo" ? trabajos.find((x) => x.id === i.trabajo_ref) : null;
+                        if (i.tipo === "trabajo" && t) {
+                          return (
+                            <div key={idx} style={{ border: "1px solid #E4DFD3", borderRadius: 6, padding: "8px 10px" }}>
+                              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 15, color: "#1C1F1C" }}>{t.tipo}</div>
+                              <div style={{ color: "#6B6558", fontSize: 12 }}>{t.cliente || "—"} · {t.confirmado ? "Confirmado" : "Pendiente"}</div>
+                              <div style={{ fontSize: 13, marginTop: 4 }}>{t.descripcion || "—"}</div>
+                              <div style={{ fontSize: 12, marginTop: 4 }}>
+                                Cantidad: {t.cantidad ?? "—"} · Duración:{" "}
+                                {t.tipo === "Corte Láser"
+                                  ? (t.duracion_minutos != null ? `${t.duracion_minutos} min` : "—")
+                                  : (t.duracion_horas != null ? `${t.duracion_horas} h` : "—")}
+                              </div>
+                              {t.tipo === "Corte Láser" && (
+                                <div style={{ fontSize: 12, marginTop: 2 }}>
+                                  Largo: {t.largo_mm != null ? `${t.largo_mm} mm` : "—"} · Ancho: {t.ancho_mm != null ? `${t.ancho_mm} mm` : "—"} · Área:{" "}
+                                  {t.metros_cuadrados != null ? `${Number(t.metros_cuadrados).toFixed(3)} m²` : "—"}
+                                </div>
+                              )}
+                              <div style={{ fontSize: 12, marginTop: 2 }}>Material: {t.material || "—"}</div>
+                            </div>
+                          );
+                        }
+                        return (
+                          <div key={idx} style={{ border: "1px solid #E4DFD3", borderRadius: 6, padding: "8px 10px" }}>
+                            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 15, color: "#1C1F1C" }}>Ítem externo</div>
+                            <div style={{ fontSize: 13, marginTop: 4 }}>
+                              {i.descripcion}{i.cantidad ? ` (x${i.cantidad})` : ""}{i.duracion_horas ? ` · ${i.duracion_horas} h` : ""}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   ) : "—"}
                 </td>
               </tr>
