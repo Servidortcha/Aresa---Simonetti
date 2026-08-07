@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LogOut, Menu, X } from "lucide-react";
+import { LogOut, Menu, X, ChevronDown } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 
 const GROUPS = [
@@ -65,11 +65,21 @@ export default function Nav({ userEmail, rol }) {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [gruposCerrados, setGruposCerrados] = useState(() => new Set());
 
   const visibleGroups = GROUPS.map((g) => ({
     ...g,
     items: g.items.filter((t) => t.roles.includes(rol)),
   })).filter((g) => g.items.length > 0);
+
+  function toggleGrupo(label) {
+    setGruposCerrados((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      return next;
+    });
+  }
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -116,27 +126,39 @@ export default function Nav({ userEmail, rol }) {
           </button>
         </div>
 
-        <div className="flex flex-col gap-1 flex-1">
+        <div className="flex flex-col gap-1 flex-1 overflow-y-auto">
           {visibleGroups.map((g) => (
             <div key={g.label} className="mb-1">
-              <span className="block px-3 pt-3 pb-1.5 text-[10px] uppercase tracking-[0.12em] text-[#6A6F76]">{g.label}</span>
-              <div className="flex flex-col gap-1">
-                {g.items.map((t) => (
-                  <Link
-                    key={t.href}
-                    href={t.href}
-                    onClick={() => setOpen(false)}
-                    className="px-3 py-2.5 rounded-sm text-sm transition-colors"
-                    style={{
-                      backgroundColor: pathname === t.href ? "#F2EEE3" : "transparent",
-                      color: pathname === t.href ? "#1C1F1C" : "#B8B2A2",
-                      fontWeight: pathname === t.href ? 600 : 400,
-                    }}
-                  >
-                    {t.label}
-                  </Link>
-                ))}
-              </div>
+              <button
+                onClick={() => toggleGrupo(g.label)}
+                className="w-full flex items-center justify-between gap-2 px-3 pt-3 pb-1.5"
+                aria-expanded={!gruposCerrados.has(g.label)}
+              >
+                <span className="text-[10px] uppercase tracking-[0.12em] text-[#6A6F76]">{g.label}</span>
+                <ChevronDown
+                  size={14}
+                  className={`text-[#6A6F76] transition-transform duration-150 shrink-0 ${gruposCerrados.has(g.label) ? "-rotate-90" : ""}`}
+                />
+              </button>
+              {!gruposCerrados.has(g.label) && (
+                <div className="flex flex-col gap-1">
+                  {g.items.map((t) => (
+                    <Link
+                      key={t.href}
+                      href={t.href}
+                      onClick={() => setOpen(false)}
+                      className="px-3 py-2.5 rounded-sm text-sm transition-colors"
+                      style={{
+                        backgroundColor: pathname === t.href ? "#F2EEE3" : "transparent",
+                        color: pathname === t.href ? "#1C1F1C" : "#B8B2A2",
+                        fontWeight: pathname === t.href ? 600 : 400,
+                      }}
+                    >
+                      {t.label}
+                    </Link>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>

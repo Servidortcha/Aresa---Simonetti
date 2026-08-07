@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
 import { useAuth } from "../../../lib/AuthContext";
@@ -11,6 +12,7 @@ import {
   Truck,
   AlertTriangle,
   CalendarDays,
+  Factory,
 } from "lucide-react";
 
 const hoyLocal = new Date().toLocaleDateString("en-CA");
@@ -35,14 +37,25 @@ function Stat({ icon, label, value, sub, color }) {
   );
 }
 
-function SectionTitle({ icon, color, children }) {
+function SectionTitle({ icon, color, children, action }) {
   return (
-    <h2 className="flex items-center gap-2 font-display text-xl font-semibold text-ink mb-3">
-      <span className="p-1.5 rounded-sm" style={{ backgroundColor: (color || "#2E6F9E") + "22", color: color || "#2E6F9E" }}>
-        {icon}
-      </span>
-      {children}
-    </h2>
+    <div className="flex items-center justify-between gap-3 mb-3">
+      <h2 className="flex items-center gap-2 font-display text-xl font-semibold text-ink">
+        <span className="p-1.5 rounded-sm" style={{ backgroundColor: (color || "#2E6F9E") + "22", color: color || "#2E6F9E" }}>
+          {icon}
+        </span>
+        {children}
+      </h2>
+      {action}
+    </div>
+  );
+}
+
+function VerTodo({ href }) {
+  return (
+    <Link href={href} className="text-sm font-medium text-[#3B5166] hover:underline shrink-0">
+      Ver todo →
+    </Link>
   );
 }
 
@@ -58,6 +71,7 @@ export default function PanelPage() {
   const [personas, setPersonas] = useState([]);
   const [gruas, setGruas] = useState([]);
   const [bajos, setBajos] = useState([]);
+  const [fabricaciones, setFabricaciones] = useState([]);
 
   useEffect(() => {
     if (rol && rol !== "admin") router.replace("/ingreso-egreso");
@@ -65,14 +79,17 @@ export default function PanelPage() {
 
   async function cargar() {
     setLoading(true);
-    const [resPartes, resFrentes, resPersonas, resGruas, resInsumos] = await Promise.all([
+    const [resPartes, resFrentes, resPersonas, resGruas, resInsumos, resFab, resFabInsumos, resFabEstimados] = await Promise.all([
       supabase.from("partes_diarios").select("*").order("fecha", { ascending: false }).order("created_at", { ascending: false }).limit(60),
       supabase.from("frentes_trabajo").select("id, nombre").order("nombre"),
       supabase.from("frente_personas").select("frente_id, nombre, rol"),
       supabase.from("trabajos_grua").select("*").order("fecha", { ascending: false }).limit(60),
       supabase.from("insumos").select("*").order("deposito").order("nombre"),
+      supabase.from("fabricaciones").select("*").order("fecha_apertura", { ascending: false }),
+      supabase.from("fabricacion_insumos").select("fabricacion_id"),
+      supabase.from("fabricacion_estimados").select("fabricacion_id"),
     ]);
-    const err = [resPartes, resFrentes, resPersonas, resGruas, resInsumos].find((r) => r.error);
+    const err = [resPartes, resFrentes, resPersonas, resGruas, resInsumos, resFab, resFabInsumos, resFabEstimados].find((r) => r.error);
     if (err) {
       setError(err.error.message);
     } else {
@@ -81,6 +98,13 @@ export default function PanelPage() {
       setPersonas(resPersonas.data || []);
       setGruas(resGruas.data || []);
       setBajos((resInsumos.data || []).filter((i) => i.activo !== false && i.stock < i.minimo));
+      const insumosCount = {};
+      (resFabInsumos.data || []).forEach((r) => (insumosCount[r.fabricacion_id] = (insumosCount[r.fabricacion_id] || 0) + 1));
+      const estimadosCount = {};
+      (resFabEstimados.data || []).forEach((r) => (estimadosCount[r.fabricacion_id] = (estimadosCount[r.fabricacion_id] || 0) + 1));
+      setFabricaciones(
+        (resFab.data || []).map((f) => ({ ...f, insumosCount: insumosCount[f.id] || 0, estimadosCount: estimadosCount[f.id] || 0 }))
+      );
     }
     setLoading(false);
   }
@@ -99,6 +123,8 @@ export default function PanelPage() {
 
   const partesRecientes = partes.slice(0, 8);
   const gruasRecientes = gruas.slice(0, 8);
+  const fabricacionesAbiertas = fabricaciones.filter((f) => f.estado === "abierta");
+  const fabricacionesCerradas = fabricaciones.filter((f) => f.estado === "cerrada");
 
   return (
     <>
@@ -146,7 +172,7 @@ export default function PanelPage() {
         <div className="flex flex-col gap-8">
           {/* Stocks comprometidos */}
           <section>
-            <SectionTitle icon={<AlertTriangle size={16} />} color="#C7522A">
+            <SectionTitle icon={<AlertTriangle size={16} />} color="#C7522A" action={<VerTodo href="/stock" />}>
               Stocks comprometidos ({bajos.length})
             </SectionTitle>
             {bajos.length === 0 ? (
@@ -186,7 +212,7 @@ export default function PanelPage() {
 
           {/* Frentes de trabajo */}
           <section>
-            <SectionTitle icon={<Building2 size={16} />} color="#4B7355">
+            <SectionTitle icon={<Building2 size={16} />} color="#4B7355" action={<VerTodo href="/organigrama" />}>
               Frentes de trabajo
             </SectionTitle>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -219,9 +245,58 @@ export default function PanelPage() {
             </div>
           </section>
 
+          {/* Fabricación */}
+          <section>
+            <SectionTitle icon={<Factory size={16} />} color="#F4791E" action={<VerTodo href="/fabricacion" />}>
+              Fabricación · {fabricacionesAbiertas.length} abierta{fabricacionesAbiertas.length !== 1 ? "s" : ""}
+            </SectionTitle>
+            {fabricacionesAbiertas.length === 0 ? (
+              <Link
+                href="/fabricacion"
+                className="block bg-white border border-dashed border-line rounded-sm p-4 text-sm text-[#6B6558] hover:border-[#F4791E] hover:text-ink transition-colors"
+              >
+                No hay fabricaciones abiertas. Tocá acá para abrir una.
+              </Link>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {fabricacionesAbiertas.slice(0, 6).map((f) => (
+                  <Link
+                    key={f.id}
+                    href="/fabricacion"
+                    className="bg-white border border-line rounded-sm p-4 hover:border-[#F4791E] transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="font-display text-lg font-semibold text-ink leading-snug">{f.nombre}</div>
+                      <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide text-[#3D5A2E] bg-[#EAF0E4] px-2 py-0.5 rounded-sm shrink-0">
+                        Abierta
+                      </span>
+                    </div>
+                    {f.cliente && <div className="text-sm text-[#6B6558] mt-0.5">{f.cliente}</div>}
+                    <div className="text-xs text-[#8A8578] mt-1">Abierta el {formatFecha(f.fecha_apertura)}</div>
+                    <div className="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-[#EFEBE0] text-sm">
+                      <div>
+                        <span className="block text-[10px] uppercase tracking-wide text-[#8A8578]">Insumos usados</span>
+                        <span className="font-mono">{f.insumosCount}</span>
+                      </div>
+                      <div>
+                        <span className="block text-[10px] uppercase tracking-wide text-[#8A8578]">Estimado</span>
+                        <span className="font-mono">{f.estimadosCount}</span>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+            {fabricacionesCerradas.length > 0 && (
+              <p className="text-xs text-[#8A8578] mt-2">
+                {fabricacionesCerradas.length} obra{fabricacionesCerradas.length !== 1 ? "s" : ""} cerrada{fabricacionesCerradas.length !== 1 ? "s" : ""} en total.
+              </p>
+            )}
+          </section>
+
           {/* Partes diarios recientes */}
           <section>
-            <SectionTitle icon={<ClipboardList size={16} />} color="#2E6F9E">
+            <SectionTitle icon={<ClipboardList size={16} />} color="#2E6F9E" action={<VerTodo href="/partes-diarios" />}>
               Partes diarios recientes ({partesRecientes.length})
             </SectionTitle>
             <div className="space-y-3">
@@ -250,7 +325,7 @@ export default function PanelPage() {
 
           {/* Grúa reciente */}
           <section>
-            <SectionTitle icon={<Truck size={16} />} color="#F4791E">
+            <SectionTitle icon={<Truck size={16} />} color="#F4791E" action={<VerTodo href="/grua" />}>
               Trabajos de grúa recientes ({gruasRecientes.length})
             </SectionTitle>
             <div className="space-y-3">
