@@ -111,7 +111,10 @@ export default function PartesDiariosPage() {
     return map;
   }, [frentes]);
 
-  const esBunge = useMemo(() => nombreFrente[frenteId] === "Bunge Tancacha", [nombreFrente, frenteId]);
+  const esBunge = useMemo(
+    () => (nombreFrente[frenteId] || "").trim().toLowerCase() === "bunge tancacha",
+    [nombreFrente, frenteId]
+  );
 
   function horasIniciales(frenteIdSel) {
     return (personasPorFrente[frenteIdSel] || []).map((nombre) => ({ nombre, horas: "" }));
