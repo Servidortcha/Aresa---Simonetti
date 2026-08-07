@@ -37,6 +37,9 @@ export default function TallerPage() {
   const [nuevoTrabajoRef, setNuevoTrabajoRef] = useState("");
   const [nuevoExterno, setNuevoExterno] = useState({ descripcion: "", cantidad: "", duracion: "" });
   const [agregando, setAgregando] = useState(false);
+  const [formItems, setFormItems] = useState([]);
+  const [nuevoItemTrabajo, setNuevoItemTrabajo] = useState("");
+  const [nuevoItemExterno, setNuevoItemExterno] = useState({ descripcion: "", cantidad: "", duracion: "" });
 
   async function cargar() {
     setLoading(true);
@@ -89,6 +92,44 @@ export default function TallerPage() {
     setArchivosSeleccionados((prev) => prev.filter((_, i) => i !== idx));
   }
 
+  function anadirItemTrabajo() {
+    if (!nuevoItemTrabajo) {
+      setError("Elegí un trabajo para anexar.");
+      return;
+    }
+    const yaExiste = formItems.some((i) => i.tipo === "trabajo" && i.trabajo_ref === Number(nuevoItemTrabajo));
+    if (yaExiste) {
+      setError("Ese trabajo ya está anexado.");
+      return;
+    }
+    setFormItems((prev) => [...prev, { key: Date.now(), tipo: "trabajo", trabajo_ref: Number(nuevoItemTrabajo), descripcion: null, cantidad: null, duracion: null }]);
+    setNuevoItemTrabajo("");
+  }
+
+  function anadirItemExterno(e) {
+    e.preventDefault();
+    if (!nuevoItemExterno.descripcion.trim()) {
+      setError("Poné la descripción del ítem externo.");
+      return;
+    }
+    setFormItems((prev) => [
+      ...prev,
+      {
+        key: Date.now(),
+        tipo: "externo",
+        trabajo_ref: null,
+        descripcion: nuevoItemExterno.descripcion.trim(),
+        cantidad: nuevoItemExterno.cantidad ? Number(nuevoItemExterno.cantidad) : null,
+        duracion: nuevoItemExterno.duracion ? Number(nuevoItemExterno.duracion) : null,
+      },
+    ]);
+    setNuevoItemExterno({ descripcion: "", cantidad: "", duracion: "" });
+  }
+
+  function quitarItemForm(key) {
+    setFormItems((prev) => prev.filter((i) => i.key !== key));
+  }
+
   async function submit(e) {
     e.preventDefault();
     if (subiendo) return;
@@ -113,22 +154,47 @@ export default function TallerPage() {
     }
 
     // 2. Registrar el trabajo con los archivos ya subidos
-    const { error } = await supabase.from("taller_trabajos").insert({
-      cliente: form.cliente || null,
-      cantidad: form.cantidad ? Number(form.cantidad) : null,
-      duracion_horas: form.duracion_horas ? Number(form.duracion_horas) : null,
-      cantidad_personas: form.cantidad_personas ? Number(form.cantidad_personas) : null,
-      descripcion_materiales: form.descripcion_materiales || null,
-      archivos: archivosSubidos.length > 0 ? archivosSubidos : null,
-      usuario_email: session?.user?.email || null,
-    });
+    const { data: nuevo, error } = await supabase
+      .from("taller_trabajos")
+      .insert({
+        cliente: form.cliente || null,
+        cantidad: form.cantidad ? Number(form.cantidad) : null,
+        duracion_horas: form.duracion_horas ? Number(form.duracion_horas) : null,
+        cantidad_personas: form.cantidad_personas ? Number(form.cantidad_personas) : null,
+        descripcion_materiales: form.descripcion_materiales || null,
+        archivos: archivosSubidos.length > 0 ? archivosSubidos : null,
+        usuario_email: session?.user?.email || null,
+      })
+      .select("id");
     setSubiendo(false);
     if (error) {
       setError(error.message);
       return;
     }
+
+    // 3. Guardar los trabajos / ítems externos anexados en el formulario
+    const nuevoId = nuevo?.[0]?.id;
+    if (nuevoId && formItems.length > 0) {
+      const { error: itemsErr } = await supabase.from("taller_trabajo_items").insert(
+        formItems.map((i) => ({
+          taller_trabajo_id: nuevoId,
+          tipo: i.tipo,
+          trabajo_ref: i.tipo === "trabajo" ? i.trabajo_ref : null,
+          descripcion: i.tipo === "externo" ? i.descripcion : null,
+          cantidad: i.tipo === "externo" ? i.cantidad : null,
+          duracion_horas: i.tipo === "externo" ? i.duracion : null,
+        }))
+      );
+      if (itemsErr) {
+        setError(itemsErr.message);
+        cargar();
+        return;
+      }
+    }
+
     setForm(emptyForm);
     setArchivosSeleccionados([]);
+    setFormItems([]);
     setConfirmacion("Registro guardado");
     setTimeout(() => setConfirmacion(null), 3000);
     cargar();
@@ -284,6 +350,86 @@ export default function TallerPage() {
               </ul>
             )}
           </Field>
+
+          <div className="border-t border-[#EFEBE0] pt-4 mt-2">
+            <p className="text-xs uppercase tracking-wide text-[#6B6558] mb-2">
+              Trabajos anexados a este trabajo ({formItems.length})
+            </p>
+
+            {formItems.length > 0 && (
+              <ul className="space-y-1.5 mb-3">
+                {formItems.map((it) => {
+                  const ref = it.tipo === "trabajo" ? trabajos.find((t) => t.id === it.trabajo_ref) : null;
+                  return (
+                    <li key={it.key} className="flex items-center justify-between gap-2 bg-[#F7F4EC] rounded-sm px-3 py-2 text-sm">
+                      <div className="min-w-0">
+                        {it.tipo === "trabajo" && ref ? (
+                          <>
+                            <div className="font-medium text-[#4A463D] truncate">
+                              {ref.tipo} — {ref.descripcion || "sin descripción"}{ref.cliente ? ` (${ref.cliente})` : ""}
+                            </div>
+                            <div className="text-[10px] uppercase tracking-wide text-[#8A8578]">
+                              {ref.tipo}{ref.cliente ? ` · ${ref.cliente}` : ""}
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="font-medium text-[#4A463D]">{it.descripcion}</div>
+                            <div className="text-[10px] uppercase tracking-wide text-[#8A8578]">
+                              Externo{it.cantidad ? ` · Cant: ${it.cantidad}` : ""}{it.duracion ? ` · ${it.duracion} h` : ""}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                      <button type="button" onClick={() => quitarItemForm(it.key)} className="text-[#C7522A] hover:text-red p-1 shrink-0" title="Quitar">
+                        <Trash2 size={15} />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+
+            <div className="flex items-end gap-2">
+              <label className="block flex-1 min-w-0">
+                <span className="block text-[10px] uppercase tracking-wide text-[#8A8578] mb-1">Anexar trabajo (corte / tornería)</span>
+                <select className={inputCls} value={nuevoItemTrabajo} onChange={(e) => setNuevoItemTrabajo(e.target.value)}>
+                  <option value="">— Elegir —</option>
+                  {trabajos.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.tipo} · {t.descripcion || "sin descripción"}{t.cliente ? ` · ${t.cliente}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button type="button" onClick={anadirItemTrabajo} className="inline-flex items-center gap-1 bg-ink text-paper px-3 py-2 rounded-sm text-sm font-medium hover:bg-[#333731] disabled:opacity-60 shrink-0">
+                <Plus size={15} /> Anexar
+              </button>
+            </div>
+            {trabajos.length === 0 && (
+              <p className="text-xs text-[#C7522A] mt-2">
+                No hay trabajos de corte/tornería cargados en el módulo <b>Trabajos</b> — cargá uno ahí para poder anexarlo.
+              </p>
+            )}
+
+            <div className="flex items-end gap-2 mt-3 pt-3 border-t border-[#EFEBE0]">
+              <label className="block flex-1 min-w-0">
+                <span className="block text-[10px] uppercase tracking-wide text-[#8A8578] mb-1">Ítem externo</span>
+                <input className={inputCls} value={nuevoItemExterno.descripcion} onChange={(e) => setNuevoItemExterno({ ...nuevoItemExterno, descripcion: e.target.value })} placeholder="Ej. Soldadura tercerizada" />
+              </label>
+              <label className="block w-20 shrink-0">
+                <span className="block text-[10px] uppercase tracking-wide text-[#8A8578] mb-1">Cant.</span>
+                <input type="number" step="0.01" min="0" className={inputCls} value={nuevoItemExterno.cantidad} onChange={(e) => setNuevoItemExterno({ ...nuevoItemExterno, cantidad: e.target.value })} />
+              </label>
+              <label className="block w-20 shrink-0">
+                <span className="block text-[10px] uppercase tracking-wide text-[#8A8578] mb-1">Horas</span>
+                <input type="number" step="0.5" min="0" className={inputCls} value={nuevoItemExterno.duracion} onChange={(e) => setNuevoItemExterno({ ...nuevoItemExterno, duracion: e.target.value })} />
+              </label>
+              <button type="button" onClick={anadirItemExterno} className="inline-flex items-center gap-1 bg-white border border-line text-ink px-3 py-2 rounded-sm text-sm font-medium hover:bg-[#F2EEE3] disabled:opacity-60 shrink-0">
+                <Plus size={15} /> Agregar
+              </button>
+            </div>
+          </div>
 
           <button type="submit" disabled={subiendo} className="w-full mt-2 bg-ink text-paper py-2.5 rounded-sm text-sm font-medium hover:bg-[#333731] disabled:opacity-60">
             {subiendo ? "Subiendo..." : "Registrar"}
