@@ -416,7 +416,8 @@ export default function PartesDiariosPage() {
                             type="number"
                             step="0.5"
                             min="0"
-                            className={inputCls + " w-24 shrink-0"}
+                            className={inputCls + " shrink-0"}
+                            style={{ width: "4.5rem", appearance: "textfield", WebkitAppearance: "none" }}
                             value={h.horas}
                             onChange={(e) => setHoras((prev) => prev.map((x, i) => (i === idx ? { ...x, horas: e.target.value } : x)))}
                             placeholder="hs"
@@ -437,7 +438,10 @@ export default function PartesDiariosPage() {
                         ))}
                       </datalist>
                       <div className="text-[10px] text-[#A79A78] break-all">
-                        DEBUG: personas={JSON.stringify(personasPorFrente[frenteId])}
+                        DEBUG personas={JSON.stringify(personasPorFrente[frenteId])}
+                      </div>
+                      <div className="text-[10px] text-[#A79A78] break-all">
+                        DEBUG horas={JSON.stringify(horas)}
                       </div>
                       <button
                         type="button"
