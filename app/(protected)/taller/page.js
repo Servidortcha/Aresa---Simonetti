@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
 import { useAuth } from "../../../lib/AuthContext";
-import { Hammer, Download, Paperclip, X, FileText } from "lucide-react";
+import { Hammer, Download, Paperclip, X, FileText, ClipboardList, Plus, Trash2 } from "lucide-react";
 
 const emptyForm = { cliente: "", cantidad: "", duracion_horas: "", cantidad_personas: "", descripcion_materiales: "" };
 
@@ -32,12 +32,42 @@ export default function TallerPage() {
   const [archivosSeleccionados, setArchivosSeleccionados] = useState([]);
   const [subiendo, setSubiendo] = useState(false);
   const [verDetalle, setVerDetalle] = useState(null);
+  const [trabajos, setTrabajos] = useState([]);
+  const [itemsPorTrabajo, setItemsPorTrabajo] = useState({});
+  const [nuevoTrabajoRef, setNuevoTrabajoRef] = useState("");
+  const [nuevoExterno, setNuevoExterno] = useState({ descripcion: "", cantidad: "", duracion: "" });
+  const [agregando, setAgregando] = useState(false);
 
   async function cargar() {
     setLoading(true);
-    const { data, error } = await supabase.from("taller_trabajos").select("*").order("fecha", { ascending: false });
+    const [{ data, error }, { data: trab, error: errTrab }, { data: items, error: errItems }] = await Promise.all([
+      supabase.from("taller_trabajos").select("*").order("fecha", { ascending: false }),
+      supabase.from("trabajos").select("id, tipo, cliente, descripcion, cantidad, duracion_minutos, duracion_horas, material, confirmado").order("fecha", { ascending: false }),
+      supabase.from("taller_trabajo_items").select("id, taller_trabajo_id, tipo, trabajo_ref, descripcion, cantidad, duracion_horas"),
+    ]);
     if (error) setError(error.message);
     else setRegistros(data || []);
+    if (errTrab) setError(errTrab.message);
+    else setTrabajos(trab || []);
+    const mapa = {};
+    if (errItems) setError(errItems.message);
+    else {
+      (items || []).forEach((fila) => {
+        const ref = fila.tipo === "trabajo" ? (trab || []).find((x) => x.id === fila.trabajo_ref) : null;
+        (mapa[fila.taller_trabajo_id] = mapa[fila.taller_trabajo_id] || []).push({
+          id: fila.id,
+          tipo: fila.tipo,
+          trabajo_ref: fila.trabajo_ref,
+          descripcion: fila.descripcion,
+          cantidad: fila.cantidad,
+          duracion_horas: fila.duracion_horas,
+          refNombre: ref ? `${ref.tipo} — ${ref.descripcion || "sin descripción"}${ref.cliente ? ` (${ref.cliente})` : ""}` : null,
+          refTipo: ref?.tipo || null,
+          refCliente: ref?.cliente || null,
+        });
+      });
+      setItemsPorTrabajo(mapa);
+    }
     setLoading(false);
   }
 
@@ -104,6 +134,72 @@ export default function TallerPage() {
     cargar();
   }
 
+  async function anexarTrabajo(e) {
+    e.preventDefault();
+    if (!nuevoTrabajoRef) {
+      setError("Elegí un trabajo para anexar.");
+      return;
+    }
+    const yaExiste = (itemsPorTrabajo[verDetalle.id] || []).some((i) => i.tipo === "trabajo" && i.trabajo_ref === Number(nuevoTrabajoRef));
+    if (yaExiste) {
+      setError("Ese trabajo ya está anexado.");
+      return;
+    }
+    setAgregando(true);
+    const { error: err } = await supabase.from("taller_trabajo_items").insert({
+      taller_trabajo_id: verDetalle.id,
+      tipo: "trabajo",
+      trabajo_ref: Number(nuevoTrabajoRef),
+    });
+    setAgregando(false);
+    if (err) {
+      setError(err.message);
+      return;
+    }
+    setNuevoTrabajoRef("");
+    setConfirmacion("Trabajo anexado");
+    setTimeout(() => setConfirmacion(null), 2500);
+    cargar();
+  }
+
+  async function anexarExterno(e) {
+    e.preventDefault();
+    if (!nuevoExterno.descripcion.trim()) {
+      setError("Poné la descripción del ítem externo.");
+      return;
+    }
+    setAgregando(true);
+    const { error: err } = await supabase.from("taller_trabajo_items").insert({
+      taller_trabajo_id: verDetalle.id,
+      tipo: "externo",
+      descripcion: nuevoExterno.descripcion.trim(),
+      cantidad: nuevoExterno.cantidad ? Number(nuevoExterno.cantidad) : null,
+      duracion_horas: nuevoExterno.duracion ? Number(nuevoExterno.duracion) : null,
+    });
+    setAgregando(false);
+    if (err) {
+      setError(err.message);
+      return;
+    }
+    setNuevoExterno({ descripcion: "", cantidad: "", duracion: "" });
+    setConfirmacion("Ítem externo agregado");
+    setTimeout(() => setConfirmacion(null), 2500);
+    cargar();
+  }
+
+  async function quitarItem(itemId) {
+    setAgregando(true);
+    const { error: err } = await supabase.from("taller_trabajo_items").delete().eq("id", itemId);
+    setAgregando(false);
+    if (err) {
+      setError(err.message);
+      return;
+    }
+    setConfirmacion("Ítem quitado");
+    setTimeout(() => setConfirmacion(null), 2500);
+    cargar();
+  }
+
   async function exportarExcel() {
     const XLSX = await import("xlsx");
     const filas = registros.map((r) => ({
@@ -113,6 +209,7 @@ export default function TallerPage() {
       "Duración (horas)": r.duracion_horas ?? "",
       Personas: r.cantidad_personas ?? "",
       "Materiales usados": r.descripcion_materiales || "",
+      "Trabajos anexados": (itemsPorTrabajo[r.id] || []).map((i) => (i.tipo === "trabajo" ? i.refNombre : `${i.descripcion}${i.cantidad ? ` (x${i.cantidad})` : ""}`)).join("; "),
       Archivos: (r.archivos || []).map((a) => a.name).join(", "),
       Usuario: r.usuario_email || "",
     }));
@@ -217,21 +314,19 @@ export default function TallerPage() {
                       <span className="font-mono">{r.cantidad_personas ?? "—"}</span>
                     </div>
                   </div>
-                  {(r.descripcion_materiales || (r.archivos && r.archivos.length > 0)) && (
-                    <button onClick={() => setVerDetalle(r)} className="flex items-center justify-between w-full mt-3 pt-3 border-t border-[#EFEBE0] text-sm">
-                      <span className="flex items-center gap-1.5 text-[#3B5166] font-medium">
-                        <Paperclip size={14} /> Ver detalle
-                      </span>
-                      <span className="text-xs text-[#8A8578]">{(r.archivos || []).length} archivo{(r.archivos || []).length !== 1 ? "s" : ""}</span>
-                    </button>
-                  )}
+                  <button onClick={() => setVerDetalle(r)} className="flex items-center justify-between w-full mt-3 pt-3 border-t border-[#EFEBE0] text-sm">
+                    <span className="flex items-center gap-1.5 text-[#3B5166] font-medium">
+                      <Paperclip size={14} /> Ver detalle
+                    </span>
+                    <span className="text-xs text-[#8A8578]">{(r.archivos || []).length} archivo{(r.archivos || []).length !== 1 ? "s" : ""} · {(itemsPorTrabajo[r.id] || []).length} trabajo{(itemsPorTrabajo[r.id] || []).length !== 1 ? "s" : ""}</span>
+                  </button>
                 </div>
               ))}
             {!loading && registros.length === 0 && <p className="text-center text-sm text-[#8A8578] py-8">Aún no hay registros de Taller</p>}
           </div>
 
           <div className="hidden sm:block bg-white border border-line rounded-sm overflow-x-auto w-full">
-            <table className="w-full text-sm min-w-[760px]">
+            <table className="w-full text-sm min-w-[840px]">
               <thead>
                 <tr className="text-left text-xs uppercase text-[#6B6558] border-b border-line">
                   <th className="px-4 py-3 font-medium">Fecha</th>
@@ -240,11 +335,12 @@ export default function TallerPage() {
                   <th className="px-4 py-3 font-medium">Duración</th>
                   <th className="px-4 py-3 font-medium">Personas</th>
                   <th className="px-4 py-3 font-medium">Materiales</th>
+                  <th className="px-4 py-3 font-medium">Trabajos</th>
                   <th className="px-4 py-3 font-medium">Archivos</th>
                 </tr>
               </thead>
               <tbody>
-                {loading && <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-[#8A8578]">Cargando...</td></tr>}
+                {loading && <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-[#8A8578]">Cargando...</td></tr>}
                 {!loading && registros.map((r, idx) => (
                   <tr key={r.id} className={`${idx % 2 === 1 ? "bg-[#F7F4EC]" : ""} ${idx !== registros.length - 1 ? "border-b border-[#EFEBE0]" : ""}`}>
                     <td className="px-4 py-3 text-[#6B6558] font-mono whitespace-nowrap">{new Date(r.fecha).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}</td>
@@ -260,6 +356,13 @@ export default function TallerPage() {
                       ) : "—"}
                     </td>
                     <td className="px-4 py-3">
+                      {(itemsPorTrabajo[r.id] || []).length > 0 ? (
+                        <button onClick={() => setVerDetalle(r)} className="inline-flex items-center gap-1 text-xs text-[#3B5166] hover:underline">
+                          <ClipboardList size={13} /> {(itemsPorTrabajo[r.id] || []).length}
+                        </button>
+                      ) : "—"}
+                    </td>
+                    <td className="px-4 py-3">
                       {r.archivos && r.archivos.length > 0 ? (
                         <button onClick={() => setVerDetalle(r)} className="inline-flex items-center gap-1 text-xs text-[#3B5166] hover:underline">
                           <Paperclip size={13} /> {r.archivos.length}
@@ -269,7 +372,7 @@ export default function TallerPage() {
                   </tr>
                 ))}
                 {!loading && registros.length === 0 && (
-                  <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-[#8A8578]">Aún no hay registros de Taller</td></tr>
+                  <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-[#8A8578]">Aún no hay registros de Taller</td></tr>
                 )}
               </tbody>
             </table>
@@ -285,6 +388,78 @@ export default function TallerPage() {
             {verDetalle.descripcion_materiales && (
               <p className="text-sm text-[#4A463D] whitespace-pre-wrap mb-4">{verDetalle.descripcion_materiales}</p>
             )}
+            <div className="mb-5">
+              <p className="text-xs uppercase tracking-wide text-[#6B6558] mb-2">Trabajos anexados ({itemsPorTrabajo[verDetalle.id]?.length || 0})</p>
+              {(!itemsPorTrabajo[verDetalle.id] || itemsPorTrabajo[verDetalle.id].length === 0) && (
+                <p className="text-xs text-[#8A8578] mb-2">Sin trabajos anexados.</p>
+              )}
+              <ul className="space-y-1.5 mb-3">
+                {(itemsPorTrabajo[verDetalle.id] || []).map((it) => (
+                  <li key={it.id} className="flex items-center justify-between gap-2 bg-[#F7F4EC] rounded-sm px-3 py-2 text-sm">
+                    <div className="min-w-0">
+                      {it.tipo === "trabajo" ? (
+                        <>
+                          <div className="flex items-center gap-1.5 font-medium text-[#4A463D]">
+                            <ClipboardList size={13} className="shrink-0 text-[#8A8578]" />
+                            <span className="truncate">{it.refNombre || "Trabajo"}</span>
+                          </div>
+                          <div className="text-[10px] uppercase tracking-wide text-[#8A8578]">
+                            {it.refTipo || ""}{it.refCliente ? ` · ${it.refCliente}` : ""}
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="font-medium text-[#4A463D]">{it.descripcion}</div>
+                          <div className="text-[10px] uppercase tracking-wide text-[#8A8578]">
+                            Externo{it.cantidad ? ` · Cant: ${it.cantidad}` : ""}{it.duracion_horas ? ` · ${it.duracion_horas} h` : ""}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    <button onClick={() => quitarItem(it.id)} disabled={agregando} className="text-[#C7522A] hover:text-red p-1 shrink-0" title="Quitar">
+                      <Trash2 size={15} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+
+              <form onSubmit={anexarTrabajo} className="flex items-end gap-2 mb-3">
+                <label className="block flex-1 min-w-0">
+                  <span className="block text-[10px] uppercase tracking-wide text-[#8A8578] mb-1">Anexar trabajo (corte / tornería)</span>
+                  <select className={inputCls} value={nuevoTrabajoRef} onChange={(e) => setNuevoTrabajoRef(e.target.value)}>
+                    <option value="">— Elegir —</option>
+                    {trabajos.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.tipo} · {t.descripcion || "sin descripción"}{t.cliente ? ` · ${t.cliente}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button type="submit" disabled={agregando} className="inline-flex items-center gap-1 bg-ink text-paper px-3 py-2 rounded-sm text-sm font-medium hover:bg-[#333731] disabled:opacity-60 shrink-0">
+                  <Plus size={15} /> {agregando ? "…" : "Anexar"}
+                </button>
+              </form>
+
+              <form onSubmit={anexarExterno} className="pt-3 border-t border-[#EFEBE0]">
+                <div className="flex items-end gap-2">
+                  <label className="block flex-1 min-w-0">
+                    <span className="block text-[10px] uppercase tracking-wide text-[#8A8578] mb-1">Ítem externo</span>
+                    <input className={inputCls} value={nuevoExterno.descripcion} onChange={(e) => setNuevoExterno({ ...nuevoExterno, descripcion: e.target.value })} placeholder="Ej. Soldadura tercerizada" />
+                  </label>
+                  <label className="block w-20 shrink-0">
+                    <span className="block text-[10px] uppercase tracking-wide text-[#8A8578] mb-1">Cant.</span>
+                    <input type="number" step="0.01" min="0" className={inputCls} value={nuevoExterno.cantidad} onChange={(e) => setNuevoExterno({ ...nuevoExterno, cantidad: e.target.value })} />
+                  </label>
+                  <label className="block w-20 shrink-0">
+                    <span className="block text-[10px] uppercase tracking-wide text-[#8A8578] mb-1">Horas</span>
+                    <input type="number" step="0.5" min="0" className={inputCls} value={nuevoExterno.duracion} onChange={(e) => setNuevoExterno({ ...nuevoExterno, duracion: e.target.value })} />
+                  </label>
+                  <button type="submit" disabled={agregando} className="inline-flex items-center gap-1 bg-white border border-line text-ink px-3 py-2 rounded-sm text-sm font-medium hover:bg-[#F2EEE3] disabled:opacity-60 shrink-0">
+                    <Plus size={15} /> {agregando ? "…" : "Agregar"}
+                  </button>
+                </div>
+              </form>
+            </div>
             {verDetalle.archivos && verDetalle.archivos.length > 0 && (
               <div>
                 <p className="text-xs uppercase tracking-wide text-[#6B6558] mb-2">Archivos adjuntos</p>
