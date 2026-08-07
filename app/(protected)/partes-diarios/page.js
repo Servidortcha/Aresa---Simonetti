@@ -246,7 +246,6 @@ export default function PartesDiariosPage() {
             <h1 className="font-display text-3xl font-semibold">Partes diarios</h1>
             <p className="text-sm text-[#6B6558] mt-0.5">{esAdmin ? "Todos los frentes" : "Tu frente"}</p>
           </div>
-          <span className="ml-1 text-[10px] font-mono bg-[#EAF0F5] text-[#2E6F9E] px-1.5 py-0.5 rounded-sm">v7</span>
         </div>
         <button onClick={abrirNuevo} className="flex items-center gap-1.5 bg-ink text-paper px-4 py-2 rounded-sm text-sm font-medium hover:bg-[#333731] transition-colors">
           <Plus size={16} /> Nuevo parte
@@ -437,12 +436,6 @@ export default function PartesDiariosPage() {
                           <option key={i} value={n} />
                         ))}
                       </datalist>
-                      <div className="text-[10px] text-[#A79A78] break-all">
-                        DEBUG personas={JSON.stringify(personasPorFrente[frenteId])}
-                      </div>
-                      <div className="text-[10px] text-[#A79A78] break-all">
-                        DEBUG horas={JSON.stringify(horas)}
-                      </div>
                       <button
                         type="button"
                         onClick={() => setHoras((prev) => [...prev, { nombre: "", horas: "" }])}
