@@ -707,6 +707,8 @@ export default function TallerPage() {
             {verDetalle.descripcion_materiales && (
               <p className="text-sm text-[#4A463D] whitespace-pre-wrap mb-4">{verDetalle.descripcion_materiales}</p>
             )}
+            {error && <p className="text-sm text-red mb-3">Error: {error}</p>}
+            {confirmacion && <p className="text-sm text-green mb-3">{confirmacion}</p>}
             <div className="mb-5">
               <p className="text-xs uppercase tracking-wide text-[#6B6558] mb-2">Trabajos anexados ({itemsPorTrabajo[verDetalle.id]?.length || 0})</p>
               {(!itemsPorTrabajo[verDetalle.id] || itemsPorTrabajo[verDetalle.id].length === 0) && (
