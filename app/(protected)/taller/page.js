@@ -232,11 +232,27 @@ export default function TallerPage() {
         return;
       }
       trabajoId = nuevo?.[0]?.id;
+      if (!trabajoId) {
+        // Por si el insert devuelve vacío: buscar el id recién creado
+        const { data: busca } = await supabase
+          .from("taller_trabajos")
+          .select("id")
+          .eq("cliente", form.cliente || "")
+          .order("fecha", { ascending: false })
+          .limit(1);
+        trabajoId = busca?.[0]?.id;
+      }
+      if (!trabajoId) {
+        setError("No se pudo obtener el id del trabajo guardado. Revisá la tabla taller_trabajos.");
+        cargar();
+        return;
+      }
     }
 
     // 3. Guardar los trabajos / ítems externos anexados en el formulario
-    if (trabajoId && formItems.length > 0) {
-      const { error: itemsErr } = await supabase.from("taller_trabajo_items").insert(
+    let anexadosGuardados = 0;
+    if (formItems.length > 0) {
+      const { data: insertados, error: itemsErr } = await supabase.from("taller_trabajo_items").insert(
         formItems.map((i) => ({
           taller_trabajo_id: trabajoId,
           tipo: i.tipo,
@@ -245,12 +261,13 @@ export default function TallerPage() {
           cantidad: i.tipo === "externo" ? i.cantidad : null,
           duracion_horas: i.tipo === "externo" ? i.duracion : null,
         }))
-      );
+      ).select("id");
       if (itemsErr) {
         setError(itemsErr.message);
         cargar();
         return;
       }
+      anexadosGuardados = insertados?.length || formItems.length;
     }
 
     setForm(emptyForm);
@@ -258,7 +275,13 @@ export default function TallerPage() {
     setArchivosActuales([]);
     setFormItems([]);
     setEditandoId(null);
-    setConfirmacion(editandoId ? "Cambios guardados" : "Registro guardado");
+    setConfirmacion(
+      editandoId
+        ? "Cambios guardados"
+        : anexadosGuardados > 0
+        ? `Registro guardado · ${anexadosGuardados} anexado(s)`
+        : "Registro guardado"
+    );
     setTimeout(() => setConfirmacion(null), 3000);
     cargar();
   }
