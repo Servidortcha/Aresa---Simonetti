@@ -35,11 +35,11 @@ export default function TallerPage() {
   const [trabajos, setTrabajos] = useState([]);
   const [itemsPorTrabajo, setItemsPorTrabajo] = useState({});
   const [nuevoTrabajoRef, setNuevoTrabajoRef] = useState("");
-  const [nuevoExterno, setNuevoExterno] = useState({ descripcion: "", cantidad: "", duracion: "" });
+  const [nuevoExterno, setNuevoExterno] = useState({ descripcion: "", cantidad: "", duracion: "", valor_pesos: "" });
   const [agregando, setAgregando] = useState(false);
   const [formItems, setFormItems] = useState([]);
   const [nuevoItemTrabajo, setNuevoItemTrabajo] = useState("");
-  const [nuevoItemExterno, setNuevoItemExterno] = useState({ descripcion: "", cantidad: "", duracion: "" });
+  const [nuevoItemExterno, setNuevoItemExterno] = useState({ descripcion: "", cantidad: "", duracion: "", valor_pesos: "" });
   const [editandoId, setEditandoId] = useState(null);
   const [archivosActuales, setArchivosActuales] = useState([]);
   const [confirmarEliminar, setConfirmarEliminar] = useState(null);
@@ -50,7 +50,7 @@ export default function TallerPage() {
     const [{ data, error }, { data: trab, error: errTrab }, { data: items, error: errItems }] = await Promise.all([
       supabase.from("taller_trabajos").select("*").order("fecha", { ascending: false }),
       supabase.from("trabajos").select("id, tipo, cliente, descripcion, cantidad, duracion_minutos, duracion_horas, material, largo_mm, ancho_mm, metros_cuadrados, confirmado").order("fecha", { ascending: false }),
-      supabase.from("taller_trabajo_items").select("id, taller_trabajo_id, tipo, trabajo_ref, descripcion, cantidad, duracion_horas"),
+      supabase.from("taller_trabajo_items").select("id, taller_trabajo_id, tipo, trabajo_ref, descripcion, cantidad, duracion_horas, valor_pesos"),
     ]);
     if (error) setError(error.message);
     else setRegistros(data || []);
@@ -68,6 +68,7 @@ export default function TallerPage() {
           descripcion: fila.descripcion,
           cantidad: fila.cantidad,
           duracion_horas: fila.duracion_horas,
+          valor_pesos: fila.valor_pesos,
           refNombre: ref ? `${ref.tipo} — ${ref.descripcion || "sin descripción"}${ref.cliente ? ` (${ref.cliente})` : ""}` : null,
           refTipo: ref?.tipo || null,
           refCliente: ref?.cliente || null,
@@ -106,7 +107,7 @@ export default function TallerPage() {
       setError("Ese trabajo ya está anexado.");
       return;
     }
-    setFormItems((prev) => [...prev, { key: Date.now(), tipo: "trabajo", trabajo_ref: Number(nuevoItemTrabajo), descripcion: null, cantidad: null, duracion: null }]);
+    setFormItems((prev) => [...prev, { key: Date.now(), tipo: "trabajo", trabajo_ref: Number(nuevoItemTrabajo), descripcion: null, cantidad: null, duracion: null, valor_pesos: null }]);
     setNuevoItemTrabajo("");
   }
 
@@ -125,9 +126,10 @@ export default function TallerPage() {
         descripcion: nuevoItemExterno.descripcion.trim(),
         cantidad: nuevoItemExterno.cantidad ? Number(nuevoItemExterno.cantidad) : null,
         duracion: nuevoItemExterno.duracion ? Number(nuevoItemExterno.duracion) : null,
+        valor_pesos: nuevoItemExterno.valor_pesos ? Number(nuevoItemExterno.valor_pesos) : null,
       },
     ]);
-    setNuevoItemExterno({ descripcion: "", cantidad: "", duracion: "" });
+    setNuevoItemExterno({ descripcion: "", cantidad: "", duracion: "", valor_pesos: "" });
   }
 
   function quitarItemForm(key) {
@@ -163,6 +165,7 @@ export default function TallerPage() {
         descripcion: i.descripcion,
         cantidad: i.cantidad,
         duracion: i.duracion_horas,
+        valor_pesos: i.valor_pesos,
       }))
     );
     setError(null);
@@ -260,6 +263,7 @@ export default function TallerPage() {
           descripcion: i.tipo === "externo" ? i.descripcion : null,
           cantidad: i.tipo === "externo" ? i.cantidad : null,
           duracion_horas: i.tipo === "externo" ? i.duracion : null,
+          valor_pesos: i.tipo === "externo" ? i.valor_pesos : null,
         }))
       ).select("id");
       if (itemsErr) {
@@ -357,13 +361,14 @@ export default function TallerPage() {
       descripcion: nuevoExterno.descripcion.trim(),
       cantidad: nuevoExterno.cantidad ? Number(nuevoExterno.cantidad) : null,
       duracion_horas: nuevoExterno.duracion ? Number(nuevoExterno.duracion) : null,
+      valor_pesos: nuevoExterno.valor_pesos ? Number(nuevoExterno.valor_pesos) : null,
     });
     setAgregando(false);
     if (err) {
       setError(err.message);
       return;
     }
-    setNuevoExterno({ descripcion: "", cantidad: "", duracion: "" });
+    setNuevoExterno({ descripcion: "", cantidad: "", duracion: "", valor_pesos: "" });
     setConfirmacion("Ítem externo agregado");
     setTimeout(() => setConfirmacion(null), 2500);
     cargar();
@@ -391,7 +396,7 @@ export default function TallerPage() {
       "Duración (horas)": r.duracion_horas ?? "",
       Personas: r.cantidad_personas ?? "",
       "Materiales usados": r.descripcion_materiales || "",
-      "Trabajos anexados": (itemsPorTrabajo[r.id] || []).map((i) => (i.tipo === "trabajo" ? i.refNombre : `${i.descripcion}${i.cantidad ? ` (x${i.cantidad})` : ""}`)).join("; "),
+      "Trabajos anexados": (itemsPorTrabajo[r.id] || []).map((i) => (i.tipo === "trabajo" ? i.refNombre : `${i.descripcion}${i.cantidad ? ` (x${i.cantidad})` : ""}${i.valor_pesos ? ` · $${i.valor_pesos}` : ""}`)).join("; "),
       Archivos: (r.archivos || []).map((a) => a.name).join(", "),
       Usuario: r.usuario_email || "",
     }));
@@ -508,7 +513,7 @@ export default function TallerPage() {
                           <>
                             <div className="font-medium text-[#4A463D]">{it.descripcion}</div>
                             <div className="text-[10px] uppercase tracking-wide text-[#8A8578]">
-                              Externo{it.cantidad ? ` · Cant: ${it.cantidad}` : ""}{it.duracion ? ` · ${it.duracion} h` : ""}
+                              Externo{it.cantidad ? ` · Cant: ${it.cantidad}` : ""}{it.duracion ? ` · ${it.duracion} h` : ""}{it.valor_pesos ? ` · $${Number(it.valor_pesos).toLocaleString("es-AR")}` : ""}
                             </div>
                           </>
                         )}
@@ -557,6 +562,10 @@ export default function TallerPage() {
                 <span className="block text-[10px] uppercase tracking-wide text-[#8A8578] mb-1">Horas</span>
                 <input type="number" step="0.5" min="0" className={inputCls} value={nuevoItemExterno.duracion} onChange={(e) => setNuevoItemExterno({ ...nuevoItemExterno, duracion: e.target.value })} />
               </label>
+              <label className="block w-24 shrink-0">
+                <span className="block text-[10px] uppercase tracking-wide text-[#8A8578] mb-1">Valor $</span>
+                <input type="number" step="0.01" min="0" className={inputCls} value={nuevoItemExterno.valor_pesos} onChange={(e) => setNuevoItemExterno({ ...nuevoItemExterno, valor_pesos: e.target.value })} placeholder="0" />
+              </label>
               <button type="button" onClick={anadirItemExterno} className="inline-flex items-center gap-1 bg-white border border-line text-ink px-3 py-2 rounded-sm text-sm font-medium hover:bg-[#F2EEE3] disabled:opacity-60 shrink-0">
                 <Plus size={15} /> Agregar
               </button>
@@ -596,7 +605,7 @@ export default function TallerPage() {
                     <span className="flex items-center gap-1.5 text-[#3B5166] font-medium">
                       <Paperclip size={14} /> Ver detalle
                     </span>
-                    <span className="text-xs text-[#8A8578]">{(r.archivos || []).length} archivo{(r.archivos || []).length !== 1 ? "s" : ""} · {(itemsPorTrabajo[r.id] || []).length} trabajo{(itemsPorTrabajo[r.id] || []).length !== 1 ? "s" : ""}</span>
+                    <span className="text-xs text-[#8A8578]">{(r.archivos || []).length} archivo{(r.archivos || []).length !== 1 ? "s" : ""} · {(itemsPorTrabajo[r.id] || []).length} anexado{(itemsPorTrabajo[r.id] || []).length !== 1 ? "s" : ""}</span>
                   </button>
                   <div className="flex items-center gap-2 mt-2">
                     <button onClick={() => abrirEditar(r)} className="flex items-center gap-1.5 px-3 py-2 border border-line rounded-sm text-sm font-medium text-ink">
@@ -646,10 +655,18 @@ export default function TallerPage() {
                       ) : "—"}
                     </td>
                     <td className="px-4 py-3">
-                      <button onClick={() => setVerDetalle(r)} className="inline-flex items-center gap-1 text-xs text-[#3B5166] hover:underline">
-                        <ClipboardList size={13} />
-                        {(itemsPorTrabajo[r.id] || []).length > 0 ? (itemsPorTrabajo[r.id] || []).length : "Agregar"}
-                      </button>
+                      {(itemsPorTrabajo[r.id] || []).length > 0 ? (
+                        <button onClick={() => setVerDetalle(r)} className="inline-flex items-center gap-1 text-xs text-[#3B5166] hover:underline">
+                          <ClipboardList size={13} />
+                          <span className="max-w-[220px] truncate">
+                            {(itemsPorTrabajo[r.id] || []).map((i) => (i.tipo === "trabajo" ? i.refNombre : `${i.descripcion}${i.valor_pesos ? ` ($${Number(i.valor_pesos).toLocaleString("es-AR")})` : ""}`)).join(" · ")}
+                          </span>
+                        </button>
+                      ) : (
+                        <button onClick={() => setVerDetalle(r)} className="inline-flex items-center gap-1 text-xs text-[#3B5166] hover:underline">
+                          <ClipboardList size={13} /> Agregar
+                        </button>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       {r.archivos && r.archivos.length > 0 ? (
@@ -713,7 +730,7 @@ export default function TallerPage() {
                         <>
                           <div className="font-medium text-[#4A463D]">{it.descripcion}</div>
                           <div className="text-[10px] uppercase tracking-wide text-[#8A8578]">
-                            Externo{it.cantidad ? ` · Cant: ${it.cantidad}` : ""}{it.duracion_horas ? ` · ${it.duracion_horas} h` : ""}
+                            Externo{it.cantidad ? ` · Cant: ${it.cantidad}` : ""}{it.duracion_horas ? ` · ${it.duracion_horas} h` : ""}{it.valor_pesos ? ` · $${Number(it.valor_pesos).toLocaleString("es-AR")}` : ""}
                           </div>
                         </>
                       )}
@@ -760,6 +777,10 @@ export default function TallerPage() {
                   <label className="block w-20 shrink-0">
                     <span className="block text-[10px] uppercase tracking-wide text-[#8A8578] mb-1">Horas</span>
                     <input type="number" step="0.5" min="0" className={inputCls} value={nuevoExterno.duracion} onChange={(e) => setNuevoExterno({ ...nuevoExterno, duracion: e.target.value })} />
+                  </label>
+                  <label className="block w-24 shrink-0">
+                    <span className="block text-[10px] uppercase tracking-wide text-[#8A8578] mb-1">Valor $</span>
+                    <input type="number" step="0.01" min="0" className={inputCls} value={nuevoExterno.valor_pesos} onChange={(e) => setNuevoExterno({ ...nuevoExterno, valor_pesos: e.target.value })} placeholder="0" />
                   </label>
                   <button type="submit" disabled={agregando} className="inline-flex items-center gap-1 bg-white border border-line text-ink px-3 py-2 rounded-sm text-sm font-medium hover:bg-[#F2EEE3] disabled:opacity-60 shrink-0">
                     <Plus size={15} /> {agregando ? "…" : "Agregar"}
@@ -853,6 +874,9 @@ export default function TallerPage() {
                             <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 15, color: "#1C1F1C" }}>Ítem externo</div>
                             <div style={{ fontSize: 13, marginTop: 4 }}>
                               {i.descripcion}{i.cantidad ? ` (x${i.cantidad})` : ""}{i.duracion_horas ? ` · ${i.duracion_horas} h` : ""}
+                            </div>
+                            <div style={{ fontSize: 13, marginTop: 2, fontWeight: 600 }}>
+                              {i.valor_pesos != null ? `$ ${Number(i.valor_pesos).toLocaleString("es-AR")}` : "—"}
                             </div>
                           </div>
                         );
