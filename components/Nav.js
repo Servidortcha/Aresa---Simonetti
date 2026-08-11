@@ -31,6 +31,12 @@ const GROUPS = [
     ],
   },
   {
+    label: "Comercial",
+    items: [
+      { href: "/precios", label: "Precios", roles: ["admin"] },
+    ],
+  },
+  {
     label: "Herramientas",
     items: [
       { href: "/nesting", label: "Nesting", roles: ["admin", "taller_stock"] },

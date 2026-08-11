@@ -18,6 +18,7 @@ const emptyForm = {
   largo_mm: "",
   ancho_mm: "",
   confirmado: true,
+  fabricacion_id: "",
 };
 
 const inputCls = "w-full px-3 py-2 bg-white border border-line rounded-sm text-sm text-ink focus:outline-none focus:ring-2 focus:ring-green focus:border-transparent";
@@ -45,6 +46,7 @@ export default function TrabajosPage() {
   const puedeAcceder = rol === "admin" || rol === "taller_stock";
 
   const [trabajos, setTrabajos] = useState([]);
+  const [obras, setObras] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [confirmacion, setConfirmacion] = useState(null);
@@ -60,6 +62,12 @@ export default function TrabajosPage() {
   const esLaser = form.tipo === "Corte Láser";
   const m2Preview = useMemo(() => calcularM2(form.largo_mm, form.ancho_mm, form.cantidad), [form.largo_mm, form.ancho_mm, form.cantidad]);
 
+  const obraPorId = useMemo(() => {
+    const map = {};
+    obras.forEach((o) => (map[o.id] = o));
+    return map;
+  }, [obras]);
+
   const trabajosFiltrados = useMemo(
     () =>
       trabajos
@@ -70,9 +78,14 @@ export default function TrabajosPage() {
 
   async function cargar() {
     setLoading(true);
-    const { data, error } = await supabase.from("trabajos").select("*").order("fecha", { ascending: false });
+    const [{ data, error }, { data: obrasData, error: errObras }] = await Promise.all([
+      supabase.from("trabajos").select("*").order("fecha", { ascending: false }),
+      supabase.from("fabricaciones").select("id, nombre, cliente, estado").order("fecha_apertura", { ascending: false }),
+    ]);
     if (error) setError(error.message);
     else setTrabajos(data || []);
+    if (errObras) setError(errObras.message);
+    else setObras(obrasData || []);
     setLoading(false);
   }
 
@@ -105,6 +118,7 @@ export default function TrabajosPage() {
       largo_mm: t.largo_mm != null ? String(t.largo_mm) : "",
       ancho_mm: t.ancho_mm != null ? String(t.ancho_mm) : "",
       confirmado: t.confirmado,
+      fabricacion_id: t.fabricacion_id != null ? String(t.fabricacion_id) : "",
     });
     setArchivoSeleccionado(null);
     setArchivoActual(t.archivo_dxf || null);
@@ -149,6 +163,7 @@ export default function TrabajosPage() {
       ancho_mm: esLaser && form.ancho_mm ? Number(form.ancho_mm) : null,
       metros_cuadrados,
       confirmado: form.confirmado,
+      fabricacion_id: form.fabricacion_id ? Number(form.fabricacion_id) : null,
     };
     if (archivo_dxf !== undefined) payload.archivo_dxf = archivo_dxf;
 
@@ -195,6 +210,7 @@ export default function TrabajosPage() {
       Tipo: t.tipo,
       Estado: t.confirmado ? "Confirmado" : "Pendiente",
       Cliente: t.cliente || "",
+      Obra: t.fabricacion_id ? (obraPorId[t.fabricacion_id]?.nombre || "") : "",
       Descripción: t.descripcion || "",
       Cantidad: t.cantidad ?? "",
       "Duración (min)": t.duracion_minutos ?? "",
@@ -306,6 +322,20 @@ export default function TrabajosPage() {
             <input className={inputCls} value={form.material} onChange={(e) => setForm({ ...form, material: e.target.value })} placeholder="Ej. Chapa de acero 3mm" />
           </Field>
 
+          <Field label="Obra (opcional)">
+            <select className={inputCls} value={form.fabricacion_id} onChange={(e) => setForm({ ...form, fabricacion_id: e.target.value })}>
+              <option value="">— Sin obra asignada —</option>
+              {obras
+                .filter((o) => o.estado === "abierta" || String(o.id) === form.fabricacion_id)
+                .map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.nombre}
+                    {o.cliente ? ` (${o.cliente})` : ""}
+                  </option>
+                ))}
+            </select>
+          </Field>
+
           {esLaser && (
             <Field label={editingId ? "Reemplazar archivo DXF (opcional)" : "Archivo DXF para el operador (opcional)"}>
               <label className="flex items-center gap-2 border border-dashed border-line rounded-sm px-3 py-2.5 text-sm text-[#6B6558] cursor-pointer hover:bg-[#F2EEE3] transition-colors">
@@ -397,6 +427,11 @@ export default function TrabajosPage() {
                   </div>
                   <div className="font-medium leading-snug">{t.cliente || "Sin cliente"}</div>
                   {t.descripcion && <p className="text-sm text-[#4A463D] mt-0.5">{t.descripcion}</p>}
+                  {t.fabricacion_id && (
+                    <p className="text-xs text-[#3B5166] mt-1">
+                      Obra: <span className="font-medium">{obraPorId[t.fabricacion_id]?.nombre || "—"}</span>
+                    </p>
+                  )}
                   <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm mt-2.5 pt-2.5 border-t border-[#EFEBE0]">
                     <div>
                       <span className="block text-[10px] uppercase tracking-wide text-[#8A8578]">Cantidad</span>
@@ -442,13 +477,14 @@ export default function TrabajosPage() {
           </div>
 
           <div className="hidden sm:block bg-white border border-line rounded-sm overflow-x-auto w-full">
-            <table className="w-full text-sm min-w-[960px]">
+            <table className="w-full text-sm min-w-[1020px]">
               <thead>
                 <tr className="text-left text-xs uppercase text-[#6B6558] border-b border-line">
                   <th className="px-4 py-3 font-medium">Fecha</th>
                   <th className="px-4 py-3 font-medium">Tipo</th>
                   <th className="px-4 py-3 font-medium">Estado</th>
                   <th className="px-4 py-3 font-medium">Cliente</th>
+                  <th className="px-4 py-3 font-medium">Obra</th>
                   <th className="px-4 py-3 font-medium">Descripción</th>
                   <th className="px-4 py-3 font-medium">Cant.</th>
                   <th className="px-4 py-3 font-medium">Duración</th>
@@ -458,7 +494,7 @@ export default function TrabajosPage() {
                 </tr>
               </thead>
               <tbody>
-                {loading && <tr><td colSpan={10} className="px-4 py-8 text-center text-sm text-[#8A8578]">Cargando...</td></tr>}
+                {loading && <tr><td colSpan={11} className="px-4 py-8 text-center text-sm text-[#8A8578]">Cargando...</td></tr>}
                 {!loading && trabajosFiltrados.map((t, idx) => (
                   <tr key={t.id} className={`${idx % 2 === 1 ? "bg-[#F7F4EC]" : ""} ${idx !== trabajosFiltrados.length - 1 ? "border-b border-[#EFEBE0]" : ""}`}>
                     <td className="px-4 py-3 text-[#6B6558] font-mono whitespace-nowrap">{new Date(t.fecha).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}</td>
@@ -482,6 +518,9 @@ export default function TrabajosPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-[#4A463D] whitespace-nowrap">{t.cliente || "—"}</td>
+                    <td className="px-4 py-3 text-[#3B5166] whitespace-nowrap">
+                      {t.fabricacion_id ? (obraPorId[t.fabricacion_id]?.nombre || "—") : "—"}
+                    </td>
                     <td className="px-4 py-3 text-[#4A463D]">{t.descripcion || "—"}</td>
                     <td className="px-4 py-3 font-mono">{t.cantidad ?? "—"}</td>
                     <td className="px-4 py-3 font-mono whitespace-nowrap">
@@ -510,7 +549,7 @@ export default function TrabajosPage() {
                   </tr>
                 ))}
                 {!loading && trabajosFiltrados.length === 0 && (
-                  <tr><td colSpan={10} className="px-4 py-8 text-center text-sm text-[#8A8578]">Sin trabajos para este filtro</td></tr>
+                  <tr><td colSpan={11} className="px-4 py-8 text-center text-sm text-[#8A8578]">Sin trabajos para este filtro</td></tr>
                 )}
               </tbody>
             </table>
@@ -529,6 +568,7 @@ export default function TrabajosPage() {
               <tr><td className="pc-label">Fecha</td><td>{new Date(tarjeta.fecha).toLocaleString("es-MX", { dateStyle: "long", timeStyle: "short" })}</td></tr>
               <tr><td className="pc-label">Estado</td><td>{tarjeta.confirmado ? "Confirmado" : "Pendiente"}</td></tr>
               <tr><td className="pc-label">Cliente</td><td>{tarjeta.cliente || "—"}</td></tr>
+              <tr><td className="pc-label">Obra</td><td>{tarjeta.fabricacion_id ? (obraPorId[tarjeta.fabricacion_id]?.nombre || "—") : "—"}</td></tr>
               <tr><td className="pc-label">Descripción</td><td>{tarjeta.descripcion || "—"}</td></tr>
               <tr><td className="pc-label">Cantidad</td><td>{tarjeta.cantidad ?? "—"}</td></tr>
               <tr>
