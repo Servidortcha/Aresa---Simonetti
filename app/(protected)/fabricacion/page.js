@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
 import { useAuth } from "../../../lib/AuthContext";
-import { Factory, Plus, CheckCircle2, Lock, Boxes, CalendarClock, Download, Pencil, Trash2, Save, X, AlertTriangle, ClipboardList, Wrench, Receipt } from "lucide-react";
+import { Factory, Plus, CheckCircle2, Lock, Boxes, CalendarClock, Download, Pencil, Trash2, Save, X, AlertTriangle, ClipboardList, Wrench, Receipt, ChevronDown } from "lucide-react";
 
 const inputCls = "w-full px-3 py-2 bg-white border border-line rounded-sm text-sm text-ink focus:outline-none focus:ring-2 focus:ring-green focus:border-transparent";
 
@@ -127,6 +127,48 @@ function FormAgregarEstimado({ fabricacionId, insumos, subiendo, onAgregar }) {
         <ClipboardList size={14} /> {subiendo ? "..." : "Agregar"}
       </button>
     </form>
+  );
+}
+
+function TrabajosAsignados({ list }) {
+  const [abierto, setAbierto] = useState(false);
+  return (
+    <div className="mt-3 pt-3 border-t border-[#EFEBE0]">
+      <button
+        type="button"
+        onClick={() => setAbierto(!abierto)}
+        className="w-full flex items-center justify-between gap-2 text-left group"
+      >
+        <span className="text-[10px] uppercase tracking-wide text-[#8A8578] group-hover:text-[#4A463D] transition-colors">
+          Trabajos asignados ({list.length})
+        </span>
+        <ChevronDown
+          size={15}
+          className={"text-[#8A8578] transition-transform " + (abierto ? "rotate-180" : "")}
+        />
+      </button>
+      {abierto && (
+        <ul className="mt-2 space-y-1">
+          {list.map((t) => (
+            <li key={t.id} className="flex items-center justify-between gap-2 text-sm">
+              <span className="flex items-center gap-1.5 text-[#4A463D] min-w-0 truncate">
+                <Wrench size={13} className="shrink-0 text-[#8A8578]" />
+                <span className="truncate">
+                  {t.tipo}: {t.cliente || "Sin cliente"}
+                  {t.descripcion ? ` · ${t.descripcion}` : ""}
+                </span>
+              </span>
+              <span className="text-xs font-mono text-[#6B6558] whitespace-nowrap shrink-0">
+                {t.tipo === "Corte Láser"
+                  ? (t.duracion_minutos != null ? `${t.duracion_minutos} min` : "")
+                  : (t.duracion_horas != null ? `${t.duracion_horas} h` : "")}
+                {!t.confirmado && <span className="ml-1 text-[#B25A1E] font-medium">Pendiente</span>}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -767,30 +809,7 @@ export default function FabricacionPage() {
           </div>
         )}
 
-        {trabajosF.length > 0 && (
-          <div className="mt-3 pt-3 border-t border-[#EFEBE0]">
-            <p className="text-[10px] uppercase tracking-wide text-[#8A8578] mb-1.5">Trabajos asignados ({trabajosF.length})</p>
-            <ul className="space-y-1">
-              {trabajosF.map((t) => (
-                <li key={t.id} className="flex items-center justify-between gap-2 text-sm">
-                  <span className="flex items-center gap-1.5 text-[#4A463D] min-w-0 truncate">
-                    <Wrench size={13} className="shrink-0 text-[#8A8578]" />
-                    <span className="truncate">
-                      {t.tipo}: {t.cliente || "Sin cliente"}
-                      {t.descripcion ? ` · ${t.descripcion}` : ""}
-                    </span>
-                  </span>
-                  <span className="text-xs font-mono text-[#6B6558] whitespace-nowrap shrink-0">
-                    {t.tipo === "Corte Láser"
-                      ? (t.duracion_minutos != null ? `${t.duracion_minutos} min` : "")
-                      : (t.duracion_horas != null ? `${t.duracion_horas} h` : "")}
-                    {!t.confirmado && <span className="ml-1 text-[#B25A1E] font-medium">Pendiente</span>}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+        {trabajosF.length > 0 && <TrabajosAsignados list={trabajosF} />}
 
         {(articulosF.length > 0 || f.estado === "abierta") && (
           <div className="mt-3 pt-3 border-t border-[#EFEBE0]">

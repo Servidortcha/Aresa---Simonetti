@@ -72,6 +72,7 @@ export default function PanelPage() {
   const [gruas, setGruas] = useState([]);
   const [bajos, setBajos] = useState([]);
   const [fabricaciones, setFabricaciones] = useState([]);
+  const [avancePorFab, setAvancePorFab] = useState({});
 
   useEffect(() => {
     if (rol && rol !== "admin") router.replace("/ingreso-egreso");
@@ -86,8 +87,8 @@ export default function PanelPage() {
       supabase.from("trabajos_grua").select("*").order("fecha", { ascending: false }).limit(60),
       supabase.from("insumos").select("*").order("deposito").order("nombre"),
       supabase.from("fabricaciones").select("*").order("fecha_apertura", { ascending: false }),
-      supabase.from("fabricacion_insumos").select("fabricacion_id"),
-      supabase.from("fabricacion_estimados").select("fabricacion_id"),
+      supabase.from("fabricacion_insumos").select("fabricacion_id, insumo_id, cantidad"),
+      supabase.from("fabricacion_estimados").select("fabricacion_id, insumo_id, cantidad"),
     ]);
     const err = [resPartes, resFrentes, resPersonas, resGruas, resInsumos, resFab, resFabInsumos, resFabEstimados].find((r) => r.error);
     if (err) {
@@ -105,6 +106,31 @@ export default function PanelPage() {
       setFabricaciones(
         (resFab.data || []).map((f) => ({ ...f, insumosCount: insumosCount[f.id] || 0, estimadosCount: estimadosCount[f.id] || 0 }))
       );
+
+      const usadosMap = {};
+      (resFabInsumos.data || []).forEach((r) => {
+        usadosMap[r.fabricacion_id] = usadosMap[r.fabricacion_id] || {};
+        usadosMap[r.fabricacion_id][r.insumo_id] = (usadosMap[r.fabricacion_id][r.insumo_id] || 0) + Number(r.cantidad || 0);
+      });
+      const estPorFab = {};
+      (resFabEstimados.data || []).forEach((r) => {
+        (estPorFab[r.fabricacion_id] = estPorFab[r.fabricacion_id] || []).push({
+          insumo_id: r.insumo_id,
+          cantidad: Number(r.cantidad || 0),
+        });
+      });
+      const avanceMap = {};
+      Object.entries(estPorFab).forEach(([fabId, list]) => {
+        let sumaUsado = 0;
+        let sumaEst = 0;
+        list.forEach((e) => {
+          const usado = (usadosMap[fabId] && usadosMap[fabId][e.insumo_id]) || 0;
+          sumaUsado += Math.min(usado, e.cantidad);
+          sumaEst += e.cantidad;
+        });
+        avanceMap[fabId] = sumaEst > 0 ? Math.min(100, Math.round((sumaUsado / sumaEst) * 100)) : 0;
+      });
+      setAvancePorFab(avanceMap);
     }
     setLoading(false);
   }
@@ -273,6 +299,17 @@ export default function PanelPage() {
                     </div>
                     {f.cliente && <div className="text-sm text-[#6B6558] mt-0.5">{f.cliente}</div>}
                     <div className="text-xs text-[#8A8578] mt-1">Abierta el {formatFecha(f.fecha_apertura)}</div>
+                    {(avancePorFab[f.id] !== undefined) && (
+                      <div className="mt-3">
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-[10px] uppercase tracking-wide text-[#8A8578]">Avance de la obra</p>
+                          <span className="font-mono text-sm font-semibold text-[#4B7355]">{avancePorFab[f.id]}%</span>
+                        </div>
+                        <div className="h-2 rounded-sm bg-[#EFEBE0] overflow-hidden">
+                          <div className="h-full bg-[#4B7355] transition-all" style={{ width: `${avancePorFab[f.id]}%` }} />
+                        </div>
+                      </div>
+                    )}
                     <div className="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-[#EFEBE0] text-sm">
                       <div>
                         <span className="block text-[10px] uppercase tracking-wide text-[#8A8578]">Insumos usados</span>
