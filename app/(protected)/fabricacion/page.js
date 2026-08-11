@@ -4,9 +4,14 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
 import { useAuth } from "../../../lib/AuthContext";
-import { Factory, Plus, CheckCircle2, Lock, Boxes, CalendarClock, Download, Pencil, Trash2, Save, X, AlertTriangle, ClipboardList } from "lucide-react";
+import { Factory, Plus, CheckCircle2, Lock, Boxes, CalendarClock, Download, Pencil, Trash2, Save, X, AlertTriangle, ClipboardList, Wrench, Receipt } from "lucide-react";
 
 const inputCls = "w-full px-3 py-2 bg-white border border-line rounded-sm text-sm text-ink focus:outline-none focus:ring-2 focus:ring-green focus:border-transparent";
+
+function pesos(n) {
+  const v = Number(n || 0);
+  return "$ " + v.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
 
 function Field({ label, children }) {
   return (
@@ -133,6 +138,8 @@ export default function FabricacionPage() {
   const [insumos, setInsumos] = useState([]);
   const [insumosPorFabricacion, setInsumosPorFabricacion] = useState({});
   const [estimadosPorFabricacion, setEstimadosPorFabricacion] = useState({});
+  const [trabajosPorFab, setTrabajosPorFab] = useState({});
+  const [articulosPorFab, setArticulosPorFab] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [confirmacion, setConfirmacion] = useState(null);
@@ -143,6 +150,7 @@ export default function FabricacionPage() {
   const [formEditar, setFormEditar] = useState(vacioAbrir);
   const [insumosEdit, setInsumosEdit] = useState([]);
   const [nuevoEdit, setNuevoEdit] = useState({ insumo_id: "", cantidad: "" });
+  const [nuevoArticulo, setNuevoArticulo] = useState({ descripcion: "", cantidad: "", valor_unitario: "" });
   const [guardando, setGuardando] = useState(false);
   const [confirmarEliminar, setConfirmarEliminar] = useState(null);
   const [, setAhora] = useState(Date.now());
@@ -152,11 +160,13 @@ export default function FabricacionPage() {
 
   async function cargar() {
     setLoading(true);
-    const [{ data: fac, error: ef }, { data: ins, error: ei }, { data: fis, error: efi }, { data: est, error: eest }] = await Promise.all([
+    const [{ data: fac, error: ef }, { data: ins, error: ei }, { data: fis, error: efi }, { data: est, error: eest }, { data: tra, error: et }, { data: art, error: ea }] = await Promise.all([
       supabase.from("fabricaciones").select("*").order("fecha_apertura", { ascending: false }),
       supabase.from("insumos").select("id, nombre, unidad, stock, deposito").eq("activo", true).order("nombre"),
       supabase.from("fabricacion_insumos").select("id, fabricacion_id, insumo_id, cantidad, fecha"),
       supabase.from("fabricacion_estimados").select("id, fabricacion_id, insumo_id, cantidad"),
+      supabase.from("trabajos").select("id, tipo, cliente, descripcion, duracion_minutos, duracion_horas, confirmado, fabricacion_id, fecha"),
+      supabase.from("fabricacion_articulos_externos").select("*"),
     ]);
     if (ef) setError(ef.message);
     else setFabricaciones(fac || []);
@@ -197,6 +207,24 @@ export default function FabricacionPage() {
       setEstimadosPorFabricacion(estMap);
     } else {
       setError(eest.message);
+    }
+    const trabMap = {};
+    if (!et) {
+      (tra || []).forEach((t) => {
+        if (t.fabricacion_id != null) (trabMap[t.fabricacion_id] = trabMap[t.fabricacion_id] || []).push(t);
+      });
+      setTrabajosPorFab(trabMap);
+    } else {
+      setError(et.message);
+    }
+    const artMap = {};
+    if (!ea) {
+      (art || []).forEach((a) => {
+        (artMap[a.fabricacion_id] = artMap[a.fabricacion_id] || []).push(a);
+      });
+      setArticulosPorFab(artMap);
+    } else {
+      setError(ea.message);
     }
     setLoading(false);
     return mapa;
@@ -350,6 +378,53 @@ export default function FabricacionPage() {
       setError(err.message);
       return;
     }
+    cargar();
+  }
+
+  async function agregarArticulo(fabricacionId, e) {
+    e.preventDefault();
+    setError(null);
+    const descripcion = nuevoArticulo.descripcion.trim();
+    if (!descripcion) {
+      setError("Poné la descripción del artículo externo.");
+      return;
+    }
+    const cantidad = Number(nuevoArticulo.cantidad);
+    const valor = Number(nuevoArticulo.valor_unitario);
+    if (!cantidad || cantidad <= 0) {
+      setError("La cantidad tiene que ser mayor a 0.");
+      return;
+    }
+    if (!valor || valor < 0) {
+      setError("Poné un valor en pesos.");
+      return;
+    }
+    setSubiendo(true);
+    const { error: err } = await supabase.from("fabricacion_articulos_externos").insert({
+      fabricacion_id: Number(fabricacionId),
+      descripcion,
+      cantidad,
+      valor_unitario: valor,
+      usuario_email: session?.user?.email || null,
+    });
+    setSubiendo(false);
+    if (err) {
+      setError(err.message);
+      return;
+    }
+    setNuevoArticulo({ descripcion: "", cantidad: "", valor_unitario: "" });
+    mostrarMensaje("Artículo externo agregado");
+    cargar();
+  }
+
+  async function quitarArticulo(id) {
+    setError(null);
+    const { error: err } = await supabase.from("fabricacion_articulos_externos").delete().eq("id", id);
+    if (err) {
+      setError(err.message);
+      return;
+    }
+    mostrarMensaje("Artículo externo quitado");
     cargar();
   }
 
@@ -593,6 +668,8 @@ export default function FabricacionPage() {
   function Tarjeta({ f }) {
     const insumosF = insumosPorFabricacion[f.id] || [];
     const estimadosF = estimadosPorFabricacion[f.id] || [];
+    const trabajosF = trabajosPorFab[f.id] || [];
+    const articulosF = articulosPorFab[f.id] || [];
     const total = insumosF.reduce((acc, x) => acc + x.cantidad, 0);
 
     const usadosMap = {};
@@ -687,6 +764,75 @@ export default function FabricacionPage() {
               ))}
             </ul>
             <p className="text-xs text-[#8A8578] mt-1.5">Total: {total} unidad{(insumosF.length !== 1) ? "es" : ""} · {insumosF.length} insumo{(insumosF.length !== 1) ? "s" : ""}</p>
+          </div>
+        )}
+
+        {trabajosF.length > 0 && (
+          <div className="mt-3 pt-3 border-t border-[#EFEBE0]">
+            <p className="text-[10px] uppercase tracking-wide text-[#8A8578] mb-1.5">Trabajos asignados ({trabajosF.length})</p>
+            <ul className="space-y-1">
+              {trabajosF.map((t) => (
+                <li key={t.id} className="flex items-center justify-between gap-2 text-sm">
+                  <span className="flex items-center gap-1.5 text-[#4A463D] min-w-0 truncate">
+                    <Wrench size={13} className="shrink-0 text-[#8A8578]" />
+                    <span className="truncate">
+                      {t.tipo}: {t.cliente || "Sin cliente"}
+                      {t.descripcion ? ` · ${t.descripcion}` : ""}
+                    </span>
+                  </span>
+                  <span className="text-xs font-mono text-[#6B6558] whitespace-nowrap shrink-0">
+                    {t.tipo === "Corte Láser"
+                      ? (t.duracion_minutos != null ? `${t.duracion_minutos} min` : "")
+                      : (t.duracion_horas != null ? `${t.duracion_horas} h` : "")}
+                    {!t.confirmado && <span className="ml-1 text-[#B25A1E] font-medium">Pendiente</span>}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {(articulosF.length > 0 || f.estado === "abierta") && (
+          <div className="mt-3 pt-3 border-t border-[#EFEBE0]">
+            <p className="text-[10px] uppercase tracking-wide text-[#8A8578] mb-1.5">Artículos externos (no-stock)</p>
+            {articulosF.length === 0 && <p className="text-xs text-[#8A8578] mb-2">Sin artículos externos cargados.</p>}
+            <ul className="space-y-1 mb-2">
+              {articulosF.map((a) => (
+                <li key={a.id} className="flex items-center justify-between gap-2 text-sm">
+                  <span className="flex items-center gap-1.5 text-[#4A463D] min-w-0 truncate">
+                    <Receipt size={13} className="shrink-0 text-[#8A8578]" />
+                    <span className="truncate">
+                      {a.descripcion} <span className="text-[#8A8578]">× {a.cantidad}</span>
+                    </span>
+                  </span>
+                  <span className="flex items-center gap-2 shrink-0">
+                    <span className="font-mono">{pesos(Number(a.cantidad) * Number(a.valor_unitario))}</span>
+                    <button onClick={() => quitarArticulo(a.id)} className="text-[#C7522A] hover:text-red p-0.5" title="Quitar artículo externo">
+                      <Trash2 size={13} />
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {f.estado === "abierta" && (
+              <form onSubmit={(e) => agregarArticulo(f.id, e)} className="flex items-end gap-2">
+                <label className="block flex-1 min-w-0">
+                  <span className="block text-[10px] uppercase tracking-wide text-[#8A8578] mb-1">Descripción</span>
+                  <input className={inputCls} value={nuevoArticulo.descripcion} onChange={(e) => setNuevoArticulo({ ...nuevoArticulo, descripcion: e.target.value })} placeholder="Ej. Plegado tercerizado" />
+                </label>
+                <label className="block w-16 shrink-0">
+                  <span className="block text-[10px] uppercase tracking-wide text-[#8A8578] mb-1">Cant.</span>
+                  <input type="number" step="0.01" min="0" className={inputCls} value={nuevoArticulo.cantidad} onChange={(e) => setNuevoArticulo({ ...nuevoArticulo, cantidad: e.target.value })} placeholder="1" />
+                </label>
+                <label className="block w-28 shrink-0">
+                  <span className="block text-[10px] uppercase tracking-wide text-[#8A8578] mb-1">Valor ($)</span>
+                  <input type="number" step="0.01" min="0" className={inputCls + " text-right font-mono"} value={nuevoArticulo.valor_unitario} onChange={(e) => setNuevoArticulo({ ...nuevoArticulo, valor_unitario: e.target.value })} placeholder="0" />
+                </label>
+                <button type="submit" disabled={subiendo} className="inline-flex items-center gap-1.5 bg-white border border-line text-ink px-3 py-2 rounded-sm text-sm font-medium hover:bg-[#F2EEE3] disabled:opacity-60 shrink-0">
+                  <Plus size={14} /> {subiendo ? "..." : "Agregar"}
+                </button>
+              </form>
+            )}
           </div>
         )}
 

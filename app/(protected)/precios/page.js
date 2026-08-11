@@ -81,6 +81,7 @@ export default function PreciosPage() {
   const [estimadosPorFab, setEstimadosPorFab] = useState({});
   const [usadosPorFab, setUsadosPorFab] = useState({});
   const [cotizacionesPorFab, setCotizacionesPorFab] = useState({});
+  const [externosPorFab, setExternosPorFab] = useState({});
   const [quoteEdits, setQuoteEdits] = useState({});
   const [guardandoCatalogo, setGuardandoCatalogo] = useState(false);
   const [guardando, setGuardando] = useState(null);
@@ -89,15 +90,16 @@ export default function PreciosPage() {
 
   async function cargar() {
     setLoading(true);
-    const [resInsumos, resPrecios, resFab, resEst, resUsados, resCotiz] = await Promise.all([
+    const [resInsumos, resPrecios, resFab, resEst, resUsados, resCotiz, resExternos] = await Promise.all([
       supabase.from("insumos").select("id, nombre, unidad, deposito, activo").order("nombre"),
       supabase.from("precios_materiales").select("*"),
       supabase.from("fabricaciones").select("*").order("fecha_apertura", { ascending: false }),
       supabase.from("fabricacion_estimados").select("*"),
       supabase.from("fabricacion_insumos").select("*"),
       supabase.from("cotizaciones").select("*"),
+      supabase.from("fabricacion_articulos_externos").select("*"),
     ]);
-    const err = [resInsumos, resPrecios, resFab, resEst, resUsados, resCotiz].find((r) => r.error);
+    const err = [resInsumos, resPrecios, resFab, resEst, resUsados, resCotiz, resExternos].find((r) => r.error);
     if (err) {
       setError(err.error.message);
       setLoading(false);
@@ -154,6 +156,12 @@ export default function PreciosPage() {
     const cotMap = {};
     (resCotiz.data || []).forEach((c) => (cotMap[c.fabricacion_id] = c));
     setCotizacionesPorFab(cotMap);
+
+    const extMap = {};
+    (resExternos.data || []).forEach((a) => {
+      (extMap[a.fabricacion_id] = extMap[a.fabricacion_id] || []).push(a);
+    });
+    setExternosPorFab(extMap);
 
     const edits = {};
     (resFab.data || []).forEach((f) => {
@@ -304,6 +312,8 @@ export default function PreciosPage() {
 
   function TarjetaCotizacion({ fab, extra }) {
     const lines = armarLineas(fab, estimadosPorFab, usadosPorFab, preciosMap);
+    const externosF = externosPorFab[fab.id] || [];
+    const externosTotal = externosF.reduce((a, x) => a + (Number(x.cantidad) || 0) * (Number(x.valor_unitario) || 0), 0);
     const q = quoteEdits[fab.id] || defaultQuote();
     const horas = Number(q.horas) || 0;
     const valorHora = Number(q.valor_hora) || 0;
@@ -454,6 +464,22 @@ export default function PreciosPage() {
           </ul>
         </div>
 
+        {externosF.length > 0 && (
+          <div className="mb-3">
+            <p className="text-[10px] uppercase tracking-wide text-[#8A8578] mb-1">Artículos externos (no-stock)</p>
+            <ul className="space-y-1">
+              {externosF.map((a) => (
+                <li key={a.id} className="flex items-center justify-between gap-2 text-sm text-[#4A463D]">
+                  <span className="truncate">
+                    {a.descripcion} <span className="text-[#8A8578]">× {a.cantidad}</span>
+                  </span>
+                  <span className="font-mono shrink-0">{pesos(Number(a.cantidad) * Number(a.valor_unitario))}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-[#EFEBE0]">
           <div className="bg-[#FBF3E5] border border-[#EBD9B8] rounded-sm p-3">
             <p className="text-[10px] uppercase tracking-wide text-[#8A5A1E] mb-1.5">Presupuesto (estimado)</p>
@@ -461,6 +487,7 @@ export default function PreciosPage() {
               <div className="flex justify-between"><dt className="text-[#6B6558]">Material</dt><dd className="font-mono">{pesos(matEst)}</dd></div>
               <div className="flex justify-between"><dt className="text-[#6B6558]">Mano de obra</dt><dd className="font-mono">{pesos(mano)}</dd></div>
               <div className="flex justify-between"><dt className="text-[#6B6558]">Otros costos</dt><dd className="font-mono">{pesos(otrosTotal)}</dd></div>
+              <div className="flex justify-between"><dt className="text-[#6B6558]">Artículos externos</dt><dd className="font-mono">{pesos(externosTotal)}</dd></div>
               <div className="flex justify-between border-t border-[#EBD9B8] pt-1"><dt>Subtotal</dt><dd className="font-mono">{pesos(subEst)}</dd></div>
               <div className="flex justify-between"><dt>Margen {margen}%</dt><dd className="font-mono">{pesos(finEst - subEst)}</dd></div>
               <div className="flex justify-between text-base font-semibold text-[#8A5A1E] pt-1"><dt>Precio final</dt><dd className="font-mono">{pesos(finEst)}</dd></div>
@@ -472,6 +499,7 @@ export default function PreciosPage() {
               <div className="flex justify-between"><dt className="text-[#6B6558]">Material</dt><dd className="font-mono">{pesos(matUsado)}</dd></div>
               <div className="flex justify-between"><dt className="text-[#6B6558]">Mano de obra</dt><dd className="font-mono">{pesos(mano)}</dd></div>
               <div className="flex justify-between"><dt className="text-[#6B6558]">Otros costos</dt><dd className="font-mono">{pesos(otrosTotal)}</dd></div>
+              <div className="flex justify-between"><dt className="text-[#6B6558]">Artículos externos</dt><dd className="font-mono">{pesos(externosTotal)}</dd></div>
               <div className="flex justify-between border-t border-[#B9CBA9] pt-1"><dt>Subtotal</dt><dd className="font-mono">{pesos(subUsado)}</dd></div>
               <div className="flex justify-between"><dt>Margen {margen}%</dt><dd className="font-mono">{pesos(finUsado - subUsado)}</dd></div>
               <div className="flex justify-between text-base font-semibold text-[#3D5A2E] pt-1"><dt>Precio final</dt><dd className="font-mono">{pesos(finUsado)}</dd></div>
@@ -490,7 +518,7 @@ export default function PreciosPage() {
     );
   }
 
-  const conMateriales = fabricaciones.filter((f) => (estimadosPorFab[f.id] || []).length > 0 || (usadosPorFab[f.id] || []).length > 0);
+  const conMateriales = fabricaciones.filter((f) => (estimadosPorFab[f.id] || []).length > 0 || (usadosPorFab[f.id] || []).length > 0 || (externosPorFab[f.id] || []).length > 0);
   const idEnLista = new Set(conMateriales.map((f) => f.id));
   const disponibles = fabricaciones.filter((f) => f.estado === "abierta" && !idEnLista.has(f.id) && !extraIds.includes(f.id));
   const paraCotizar = [...conMateriales, ...fabricaciones.filter((f) => extraIds.includes(f.id))];
