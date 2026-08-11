@@ -169,6 +169,7 @@ export default function FabricacionPage() {
         if (!insumo) return;
         (mapa[fila.fabricacion_id] = mapa[fila.fabricacion_id] || []).push({
           id: fila.id,
+          insumo_id: fila.insumo_id,
           nombre: insumo.nombre,
           unidad: insumo.unidad || "u",
           deposito: insumo.deposito || "",
@@ -187,6 +188,7 @@ export default function FabricacionPage() {
         if (!insumo) return;
         (estMap[fila.fabricacion_id] = estMap[fila.fabricacion_id] || []).push({
           id: fila.id,
+          insumo_id: fila.insumo_id,
           nombre: insumo.nombre,
           unidad: insumo.unidad || "u",
           cantidad: fila.cantidad,
@@ -480,6 +482,22 @@ export default function FabricacionPage() {
       const estimadosF = estimadosPorFabricacion[f.id] || [];
       const total = insumosF.reduce((acc, x) => acc + x.cantidad, 0);
 
+      const usadosMap = {};
+      insumosF.forEach((ins) => {
+        usadosMap[ins.insumo_id] = (usadosMap[ins.insumo_id] || 0) + Number(ins.cantidad);
+      });
+      let avancePdf = null;
+      if (estimadosF.length > 0) {
+        let sumaUsado = 0;
+        let sumaEst = 0;
+        estimadosF.forEach((est) => {
+          const eq = Number(est.cantidad);
+          sumaUsado += Math.min(usadosMap[est.insumo_id] || 0, eq);
+          sumaEst += eq;
+        });
+        avancePdf = sumaEst > 0 ? Math.round((sumaUsado / sumaEst) * 100) : 0;
+      }
+
       const doc = new jsPDF();
 
       doc.setFillColor(244, 121, 30);
@@ -508,6 +526,7 @@ export default function FabricacionPage() {
       linea(`Hora hombre (${HORAS_POR_DIA} h/día):`, formatearHorasHombre(f.fecha_apertura, f.fecha_cierre));
       linea("Tiempo transcurrido:", formatearTiempo(f.fecha_apertura, f.fecha_cierre));
       linea("Total unidades usadas:", total);
+      if (avancePdf !== null) linea("Avance de la obra:", avancePdf + "%");
       y += 2;
 
       if (f.descripcion) {
@@ -546,8 +565,13 @@ export default function FabricacionPage() {
         doc.text("Estimado de insumos a usar", 14, ultimoY);
         autoTable(doc, {
           startY: ultimoY + 4,
-          head: [["Insumo", "Unidad", "Cantidad"]],
-          body: estimadosF.map((i) => [i.nombre, i.unidad, String(i.cantidad)]),
+          head: [["Insumo", "Unidad", "Estimado", "Usado", "Avance"]],
+          body: estimadosF.map((i) => {
+            const eq = Number(i.cantidad);
+            const us = usadosMap[i.insumo_id] || 0;
+            const pct = eq > 0 ? Math.min(100, Math.round((us / eq) * 100)) : us > 0 ? 100 : 0;
+            return [i.nombre, i.unidad, String(i.cantidad), String(us), pct + "%"];
+          }),
           styles: { fontSize: 9.5 },
           headStyles: { fillColor: [60, 60, 60] },
           theme: "striped",
@@ -570,6 +594,30 @@ export default function FabricacionPage() {
     const insumosF = insumosPorFabricacion[f.id] || [];
     const estimadosF = estimadosPorFabricacion[f.id] || [];
     const total = insumosF.reduce((acc, x) => acc + x.cantidad, 0);
+
+    const usadosMap = {};
+    insumosF.forEach((ins) => {
+      usadosMap[ins.insumo_id] = (usadosMap[ins.insumo_id] || 0) + Number(ins.cantidad);
+    });
+    const usadoPorId = {};
+    estimadosF.forEach((est) => {
+      const estQty = Number(est.cantidad);
+      const usado = usadosMap[est.insumo_id] || 0;
+      const pct = estQty > 0 ? Math.min(100, Math.round((usado / estQty) * 100)) : usado > 0 ? 100 : 0;
+      usadoPorId[est.id] = { usado, estQty, pct };
+    });
+    let avance = null;
+    if (estimadosF.length > 0) {
+      let sumaUsado = 0;
+      let sumaEst = 0;
+      estimadosF.forEach((est) => {
+        const d = usadoPorId[est.id];
+        sumaUsado += Math.min(d.usado, d.estQty);
+        sumaEst += d.estQty;
+      });
+      avance = sumaEst > 0 ? Math.min(100, Math.round((sumaUsado / sumaEst) * 100)) : 0;
+    }
+
     return (
       <div className="bg-white border border-line rounded-sm p-4 flex flex-col">
         <div className="flex items-start justify-between gap-3">
@@ -590,6 +638,35 @@ export default function FabricacionPage() {
             </span>
           )}
         </div>
+
+        {avance !== null && (
+          <div className="mt-3 pt-3 border-t border-[#EFEBE0]">
+            <div className="flex items-center justify-between mb-1.5">
+              <p className="text-[10px] uppercase tracking-wide text-[#8A8578]">Avance de la obra</p>
+              <span className="font-mono text-sm font-semibold text-green">{avance}%</span>
+            </div>
+            <div className="h-2 rounded-sm bg-[#EFEBE0] overflow-hidden">
+              <div className="h-full bg-green transition-all" style={{ width: `${avance}%` }} />
+            </div>
+            <p className="text-[10px] text-[#B0AA9A] mt-1.5">Materiales usados vs estimado de la obra</p>
+            {f.estado === "cerrada" && (
+              <ul className="mt-2 space-y-1">
+                {estimadosF.map((est) => {
+                  const d = usadoPorId[est.id];
+                  return (
+                    <li key={est.id} className="flex items-center gap-2 text-xs">
+                      <span className="flex-1 text-[#4A463D] truncate">{est.nombre}</span>
+                      <span className="font-mono text-[#6B6558] whitespace-nowrap">
+                        {d.usado} / {d.estQty} {est.unidad}
+                      </span>
+                      <span className="font-mono w-8 text-right text-[#4A463D]">{d.pct}%</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        )}
 
         {f.descripcion && <p className="text-sm text-[#4A463D] mt-2 whitespace-pre-wrap">{f.descripcion}</p>}
 
@@ -623,26 +700,31 @@ export default function FabricacionPage() {
               <p className="text-[10px] uppercase tracking-wide text-[#8A8578] mb-1.5">Estimado de insumos a usar</p>
               {estimadosF.length === 0 && <p className="text-xs text-[#8A8578] mb-2">Todavía no cargaste el estimado.</p>}
               <ul className="space-y-1.5 mb-2">
-                {estimadosF.map((est) => (
-                  <li key={est.id} className="flex items-center gap-2 text-sm">
-                    <span className="flex items-center gap-1.5 text-[#4A463D] min-w-0 flex-1 truncate">
-                      <ClipboardList size={13} className="shrink-0 text-[#8A8578]" />
-                      <span className="truncate">{est.nombre}</span>
-                    </span>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      defaultValue={est.cantidad}
-                      onBlur={(e) => Number(e.target.value) !== Number(est.cantidad) && cambiarEstimado(est.id, e.target.value)}
-                      className="w-20 text-center px-2 py-1 bg-white border border-line rounded-sm text-sm"
-                    />
-                    <span className="text-xs text-[#8A8578] w-10">{est.unidad}</span>
-                    <button onClick={() => quitarEstimado(est.id)} className="text-[#C7522A] hover:text-red p-0.5 shrink-0" title="Quitar del estimado">
-                      <Trash2 size={14} />
-                    </button>
-                  </li>
-                ))}
+                {estimadosF.map((est) => {
+                  const d = usadoPorId[est.id];
+                  return (
+                    <li key={est.id} className="flex items-center gap-2 text-sm">
+                      <span className="flex items-center gap-1.5 text-[#4A463D] min-w-0 flex-1 truncate">
+                        <ClipboardList size={13} className="shrink-0 text-[#8A8578]" />
+                        <span className="truncate">{est.nombre}</span>
+                      </span>
+                      <span className="text-xs font-mono text-[#6B6558] whitespace-nowrap" title={`Usado ${d.usado} de ${d.estQty} ${est.unidad}`}>
+                        usado {d.usado}/{d.estQty} ({d.pct}%)
+                      </span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        defaultValue={est.cantidad}
+                        onBlur={(e) => Number(e.target.value) !== Number(est.cantidad) && cambiarEstimado(est.id, e.target.value)}
+                        className="w-20 text-center px-2 py-1 bg-white border border-line rounded-sm text-sm"
+                      />
+                      <button onClick={() => quitarEstimado(est.id)} className="text-[#C7522A] hover:text-red p-0.5 shrink-0" title="Quitar del estimado">
+                        <Trash2 size={14} />
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>
               <FormAgregarEstimado fabricacionId={f.id} insumos={insumos} subiendo={subiendo} onAgregar={agregarEstimado} />
             </div>
