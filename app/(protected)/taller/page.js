@@ -554,8 +554,8 @@ export default function TallerPage() {
               </p>
             )}
 
-            <div className="flex items-end gap-2 mt-3 pt-3 border-t border-[#EFEBE0]">
-              <label className="block flex-1 min-w-0">
+            <div className="grid grid-cols-3 gap-2 items-end mt-3 pt-3 border-t border-[#EFEBE0] sm:flex sm:items-end sm:gap-2">
+              <label className="block flex-1 min-w-0 col-span-3 sm:col-span-1">
                 <span className="block text-[10px] uppercase tracking-wide text-[#8A8578] mb-1">Ítem externo</span>
                 <input className={inputCls} value={nuevoItemExterno.descripcion} onChange={(e) => setNuevoItemExterno({ ...nuevoItemExterno, descripcion: e.target.value })} placeholder="Ej. Soldadura tercerizada" />
               </label>
@@ -571,7 +571,7 @@ export default function TallerPage() {
                 <span className="block text-[10px] uppercase tracking-wide text-[#8A8578] mb-1">Valor $</span>
                 <input type="number" step="0.01" min="0" className={inputCls} value={nuevoItemExterno.valor_pesos} onChange={(e) => setNuevoItemExterno({ ...nuevoItemExterno, valor_pesos: e.target.value })} placeholder="0" />
               </label>
-              <button type="button" onClick={anadirItemExterno} className="inline-flex items-center gap-1 bg-white border border-line text-ink px-3 py-2 rounded-sm text-sm font-medium hover:bg-[#F2EEE3] disabled:opacity-60 shrink-0">
+              <button type="button" onClick={anadirItemExterno} className="inline-flex items-center justify-center gap-1 bg-white border border-line text-ink px-3 py-2 rounded-sm text-sm font-medium hover:bg-[#F2EEE3] disabled:opacity-60 shrink-0 col-span-3 sm:col-span-1">
                 <Plus size={15} /> Agregar
               </button>
             </div>
@@ -779,8 +779,8 @@ export default function TallerPage() {
               )}
 
               <form onSubmit={anexarExterno} className="pt-3 border-t border-[#EFEBE0]">
-                <div className="flex items-end gap-2">
-                  <label className="block flex-1 min-w-0">
+                <div className="grid grid-cols-3 gap-2 items-end sm:flex sm:items-end sm:gap-2">
+                  <label className="block flex-1 min-w-0 col-span-3 sm:col-span-1">
                     <span className="block text-[10px] uppercase tracking-wide text-[#8A8578] mb-1">Ítem externo</span>
                     <input className={inputCls} value={nuevoExterno.descripcion} onChange={(e) => setNuevoExterno({ ...nuevoExterno, descripcion: e.target.value })} placeholder="Ej. Soldadura tercerizada" />
                   </label>
@@ -796,7 +796,7 @@ export default function TallerPage() {
                     <span className="block text-[10px] uppercase tracking-wide text-[#8A8578] mb-1">Valor $</span>
                     <input type="number" step="0.01" min="0" className={inputCls} value={nuevoExterno.valor_pesos} onChange={(e) => setNuevoExterno({ ...nuevoExterno, valor_pesos: e.target.value })} placeholder="0" />
                   </label>
-                  <button type="submit" disabled={agregando} className="inline-flex items-center gap-1 bg-white border border-line text-ink px-3 py-2 rounded-sm text-sm font-medium hover:bg-[#F2EEE3] disabled:opacity-60 shrink-0">
+                  <button type="submit" disabled={agregando} className="inline-flex items-center justify-center gap-1 bg-white border border-line text-ink px-3 py-2 rounded-sm text-sm font-medium hover:bg-[#F2EEE3] disabled:opacity-60 shrink-0 col-span-3 sm:col-span-1">
                     <Plus size={15} /> {agregando ? "…" : "Agregar"}
                   </button>
                 </div>
