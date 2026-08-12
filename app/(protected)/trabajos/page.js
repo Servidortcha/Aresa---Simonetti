@@ -40,6 +40,10 @@ function calcularM2(largo, ancho, cantidad) {
   return (l * a * c) / 1_000_000;
 }
 
+function nro(n) {
+  return n != null ? "T-" + String(n).padStart(4, "0") : null;
+}
+
 export default function TrabajosPage() {
   const { rol, session } = useAuth();
   const router = useRouter();
@@ -206,6 +210,7 @@ export default function TrabajosPage() {
   async function exportarExcel() {
     const XLSX = await import("xlsx");
     const filas = trabajosFiltrados.map((t) => ({
+      "N°": nro(t.numero) || "",
       Fecha: new Date(t.fecha).toLocaleString("es-MX"),
       Tipo: t.tipo,
       Estado: t.confirmado ? "Confirmado" : "Pendiente",
@@ -412,6 +417,9 @@ export default function TrabajosPage() {
               trabajosFiltrados.map((t) => (
                 <div key={t.id} className="bg-white border border-line rounded-sm p-4">
                   <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                    {t.numero != null && (
+                      <span className="inline-block text-xs font-medium px-2 py-0.5 rounded-sm bg-ink text-paper">{nro(t.numero)}</span>
+                    )}
                     <span
                       className="inline-block text-xs font-medium px-2 py-0.5 rounded-sm"
                       style={{ backgroundColor: t.tipo === "Corte Láser" ? "#EAF0F5" : "#FBEFE6", color: t.tipo === "Corte Láser" ? "#2E6F9E" : "#B25A1E" }}
@@ -477,9 +485,10 @@ export default function TrabajosPage() {
           </div>
 
           <div className="hidden sm:block bg-white border border-line rounded-sm overflow-x-auto w-full">
-            <table className="w-full text-sm min-w-[1020px]">
+            <table className="w-full text-sm min-w-[1080px]">
               <thead>
                 <tr className="text-left text-xs uppercase text-[#6B6558] border-b border-line">
+                  <th className="px-4 py-3 font-medium">N°</th>
                   <th className="px-4 py-3 font-medium">Fecha</th>
                   <th className="px-4 py-3 font-medium">Tipo</th>
                   <th className="px-4 py-3 font-medium">Estado</th>
@@ -494,9 +503,10 @@ export default function TrabajosPage() {
                 </tr>
               </thead>
               <tbody>
-                {loading && <tr><td colSpan={11} className="px-4 py-8 text-center text-sm text-[#8A8578]">Cargando...</td></tr>}
+                {loading && <tr><td colSpan={12} className="px-4 py-8 text-center text-sm text-[#8A8578]">Cargando...</td></tr>}
                 {!loading && trabajosFiltrados.map((t, idx) => (
                   <tr key={t.id} className={`${idx % 2 === 1 ? "bg-[#F7F4EC]" : ""} ${idx !== trabajosFiltrados.length - 1 ? "border-b border-[#EFEBE0]" : ""}`}>
+                    <td className="px-4 py-3 font-mono whitespace-nowrap">{t.numero != null ? nro(t.numero) : "—"}</td>
                     <td className="px-4 py-3 text-[#6B6558] font-mono whitespace-nowrap">{new Date(t.fecha).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}</td>
                     <td className="px-4 py-3">
                       <span
@@ -549,7 +559,7 @@ export default function TrabajosPage() {
                   </tr>
                 ))}
                 {!loading && trabajosFiltrados.length === 0 && (
-                  <tr><td colSpan={11} className="px-4 py-8 text-center text-sm text-[#8A8578]">Sin trabajos para este filtro</td></tr>
+                  <tr><td colSpan={12} className="px-4 py-8 text-center text-sm text-[#8A8578]">Sin trabajos para este filtro</td></tr>
                 )}
               </tbody>
             </table>
@@ -565,6 +575,7 @@ export default function TrabajosPage() {
           </div>
           <table className="pc-tabla">
             <tbody>
+              <tr><td className="pc-label">N°</td><td>{tarjeta.numero != null ? nro(tarjeta.numero) : "—"}</td></tr>
               <tr><td className="pc-label">Fecha</td><td>{new Date(tarjeta.fecha).toLocaleString("es-MX", { dateStyle: "long", timeStyle: "short" })}</td></tr>
               <tr><td className="pc-label">Estado</td><td>{tarjeta.confirmado ? "Confirmado" : "Pendiente"}</td></tr>
               <tr><td className="pc-label">Cliente</td><td>{tarjeta.cliente || "—"}</td></tr>

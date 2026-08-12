@@ -11,6 +11,10 @@ const emptyForm = { cliente: "", cantidad: "", duracion_horas: "", cantidad_pers
 const inputCls = "w-full px-3 py-2 bg-white border border-line rounded-sm text-sm text-ink focus:outline-none focus:ring-2 focus:ring-green focus:border-transparent";
 const textareaCls = inputCls + " resize-y min-h-[110px]";
 
+function nro(n) {
+  return n != null ? "TA-" + String(n).padStart(4, "0") : null;
+}
+
 function Field({ label, children }) {
   return (
     <label className="block mb-3">
@@ -49,7 +53,7 @@ export default function TallerPage() {
     setLoading(true);
     const [{ data, error }, { data: trab, error: errTrab }, { data: items, error: errItems }] = await Promise.all([
       supabase.from("taller_trabajos").select("*").order("fecha", { ascending: false }),
-      supabase.from("trabajos").select("id, tipo, cliente, descripcion, cantidad, duracion_minutos, duracion_horas, material, largo_mm, ancho_mm, metros_cuadrados, confirmado").order("fecha", { ascending: false }),
+      supabase.from("trabajos").select("id, numero, tipo, cliente, descripcion, cantidad, duracion_minutos, duracion_horas, material, largo_mm, ancho_mm, metros_cuadrados, confirmado").order("fecha", { ascending: false }),
       supabase.from("taller_trabajo_items").select("id, taller_trabajo_id, tipo, trabajo_ref, descripcion, cantidad, duracion_horas, valor_pesos"),
     ]);
     if (error) setError(error.message);
@@ -69,7 +73,7 @@ export default function TallerPage() {
           cantidad: fila.cantidad,
           duracion_horas: fila.duracion_horas,
           valor_pesos: fila.valor_pesos,
-          refNombre: ref ? `${ref.tipo} — ${ref.descripcion || "sin descripción"}${ref.cliente ? ` (${ref.cliente})` : ""}` : null,
+          refNombre: ref ? `${ref.numero != null ? nro(ref.numero) + " · " : ""}${ref.tipo} — ${ref.descripcion || "sin descripción"}${ref.cliente ? ` (${ref.cliente})` : ""}` : null,
           refTipo: ref?.tipo || null,
           refCliente: ref?.cliente || null,
         });
@@ -390,6 +394,7 @@ export default function TallerPage() {
   async function exportarExcel() {
     const XLSX = await import("xlsx");
     const filas = registros.map((r) => ({
+      "N°": nro(r.numero) || "",
       Fecha: new Date(r.fecha).toLocaleString("es-MX"),
       Cliente: r.cliente || "",
       Cantidad: r.cantidad ?? "",
@@ -534,7 +539,7 @@ export default function TallerPage() {
                   <option value="">— Elegir —</option>
                   {trabajos.map((t) => (
                     <option key={t.id} value={t.id}>
-                      {t.tipo} · {t.descripcion || "sin descripción"}{t.cliente ? ` · ${t.cliente}` : ""}
+                      {t.numero != null ? nro(t.numero) + " · " : ""}{t.tipo} · {t.descripcion || "sin descripción"}{t.cliente ? ` · ${t.cliente}` : ""}
                     </option>
                   ))}
                 </select>
@@ -585,7 +590,12 @@ export default function TallerPage() {
             {!loading &&
               registros.map((r) => (
                 <div key={r.id} className="bg-white border border-line rounded-sm p-4">
-                  <div className="font-medium leading-snug">{r.cliente || "Sin cliente"}</div>
+                  <div className="flex items-center gap-2">
+                    {r.numero != null && (
+                      <span className="inline-block text-xs font-medium px-2 py-0.5 rounded-sm bg-ink text-paper shrink-0">{nro(r.numero)}</span>
+                    )}
+                    <div className="font-medium leading-snug">{r.cliente || "Sin cliente"}</div>
+                  </div>
                   <div className="text-xs text-[#6B6558] font-mono mt-0.5">{new Date(r.fecha).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}</div>
                   <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm mt-2.5 pt-2.5 border-t border-[#EFEBE0]">
                     <div>
@@ -624,9 +634,10 @@ export default function TallerPage() {
           </div>
 
           <div className="hidden sm:block bg-white border border-line rounded-sm overflow-x-auto w-full">
-            <table className="w-full text-sm min-w-[960px]">
+            <table className="w-full text-sm min-w-[1010px]">
               <thead>
                 <tr className="text-left text-xs uppercase text-[#6B6558] border-b border-line">
+                  <th className="px-4 py-3 font-medium">N°</th>
                   <th className="px-4 py-3 font-medium">Fecha</th>
                   <th className="px-4 py-3 font-medium">Cliente</th>
                   <th className="px-4 py-3 font-medium">Cant.</th>
@@ -639,9 +650,10 @@ export default function TallerPage() {
                 </tr>
               </thead>
               <tbody>
-                {loading && <tr><td colSpan={9} className="px-4 py-8 text-center text-sm text-[#8A8578]">Cargando...</td></tr>}
+                {loading && <tr><td colSpan={10} className="px-4 py-8 text-center text-sm text-[#8A8578]">Cargando...</td></tr>}
                 {!loading && registros.map((r, idx) => (
                   <tr key={r.id} className={`${idx % 2 === 1 ? "bg-[#F7F4EC]" : ""} ${idx !== registros.length - 1 ? "border-b border-[#EFEBE0]" : ""}`}>
+                    <td className="px-4 py-3 font-mono whitespace-nowrap">{r.numero != null ? nro(r.numero) : "—"}</td>
                     <td className="px-4 py-3 text-[#6B6558] font-mono whitespace-nowrap">{new Date(r.fecha).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}</td>
                     <td className="px-4 py-3 text-[#4A463D] whitespace-nowrap">{r.cliente || "—"}</td>
                     <td className="px-4 py-3 font-mono">{r.cantidad ?? "—"}</td>
@@ -691,7 +703,7 @@ export default function TallerPage() {
                   </tr>
                 ))}
                 {!loading && registros.length === 0 && (
-                  <tr><td colSpan={9} className="px-4 py-8 text-center text-sm text-[#8A8578]">Aún no hay registros de Taller</td></tr>
+                  <tr><td colSpan={10} className="px-4 py-8 text-center text-sm text-[#8A8578]">Aún no hay registros de Taller</td></tr>
                 )}
               </tbody>
             </table>
@@ -751,7 +763,7 @@ export default function TallerPage() {
                     <option value="">— Elegir —</option>
                     {trabajos.map((t) => (
                       <option key={t.id} value={t.id}>
-                        {t.tipo} · {t.descripcion || "sin descripción"}{t.cliente ? ` · ${t.cliente}` : ""}
+                        {t.numero != null ? nro(t.numero) + " · " : ""}{t.tipo} · {t.descripcion || "sin descripción"}{t.cliente ? ` · ${t.cliente}` : ""}
                       </option>
                     ))}
                   </select>
@@ -836,6 +848,7 @@ export default function TallerPage() {
           </div>
           <table className="pc-tabla">
             <tbody>
+              <tr><td className="pc-label">N°</td><td>{tarjeta.numero != null ? nro(tarjeta.numero) : "—"}</td></tr>
               <tr><td className="pc-label">Fecha</td><td>{new Date(tarjeta.fecha).toLocaleString("es-MX", { dateStyle: "long", timeStyle: "short" })}</td></tr>
               <tr><td className="pc-label">Cliente</td><td>{tarjeta.cliente || "—"}</td></tr>
               <tr><td className="pc-label">Cantidad</td><td>{tarjeta.cantidad ?? "—"}</td></tr>
@@ -852,7 +865,12 @@ export default function TallerPage() {
                         if (i.tipo === "trabajo" && t) {
                           return (
                             <div key={idx} style={{ border: "1px solid #E4DFD3", borderRadius: 6, padding: "8px 10px" }}>
-                              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 15, color: "#1C1F1C" }}>{t.tipo}</div>
+                              <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                                <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 15, color: "#1C1F1C" }}>{t.tipo}</span>
+                                {t.numero != null && (
+                                  <span style={{ fontSize: 11, color: "#8A8578" }}>{nro(t.numero)}</span>
+                                )}
+                              </div>
                               <div style={{ color: "#6B6558", fontSize: 12 }}>{t.cliente || "—"} · {t.confirmado ? "Confirmado" : "Pendiente"}</div>
                               <div style={{ fontSize: 13, marginTop: 4 }}>{t.descripcion || "—"}</div>
                               <div style={{ fontSize: 12, marginTop: 4 }}>
