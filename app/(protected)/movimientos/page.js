@@ -17,7 +17,9 @@ function cantidadConSigno(m) {
   const uni = m.insumos?.unidad || "";
   if (m.tipo === "entrada") return `+${cant} ${uni}`;
   if (m.tipo === "salida") return `-${cant} ${uni}`;
-  return `${cant} ${uni}`;
+  const num = Number(cant);
+  if (num === 0 || Number.isNaN(num)) return `${cant} ${uni}`.trim();
+  return `${num > 0 ? "+" : ""}${num} ${uni}`.trim();
 }
 
 export default function MovimientosPage() {
