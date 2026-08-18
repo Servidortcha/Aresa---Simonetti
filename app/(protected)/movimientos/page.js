@@ -12,6 +12,14 @@ function tipoInfo(tipo) {
   return { label: "Ajuste", color: "#B25A1E", Icon: Settings2 };
 }
 
+function cantidadConSigno(m) {
+  const cant = m.cantidad ?? "";
+  const uni = m.insumos?.unidad || "";
+  if (m.tipo === "entrada") return `+${cant} ${uni}`;
+  if (m.tipo === "salida") return `-${cant} ${uni}`;
+  return `${cant} ${uni}`;
+}
+
 export default function MovimientosPage() {
   const { rol } = useAuth();
   const router = useRouter();
@@ -78,7 +86,7 @@ export default function MovimientosPage() {
       Insumo: m.insumos?.nombre,
       Depósito: m.insumos?.deposito || "",
       Tipo: tipoInfo(m.tipo).label,
-      Cantidad: m.cantidad,
+      Cantidad: cantidadConSigno(m),
       Unidad: m.insumos?.unidad,
       "Stock resultante": m.stock_resultante ?? "",
       "Usado en": m.producto_texto || "",
@@ -164,7 +172,7 @@ export default function MovimientosPage() {
                   </div>
                   <div>
                     <span className="block text-[10px] uppercase tracking-wide text-[#8A8578]">Cantidad</span>
-                    <span className="font-mono">{m.cantidad} {m.insumos?.unidad}</span>
+                    <span className="font-mono">{cantidadConSigno(m)}</span>
                   </div>
                   <div>
                     <span className="block text-[10px] uppercase tracking-wide text-[#8A8578]">Depósito</span>
@@ -234,7 +242,7 @@ export default function MovimientosPage() {
                       {ti.label}
                     </span>
                   </td>
-                  <td className="px-4 py-3 font-mono">{m.cantidad} {m.insumos?.unidad}</td>
+                  <td className="px-4 py-3 font-mono">{cantidadConSigno(m)}</td>
                   <td className="px-4 py-3 font-mono text-[#6B6558]">{m.stock_resultante ?? "—"} {m.stock_resultante != null ? m.insumos?.unidad : ""}</td>
                   <td className="px-4 py-3 text-[#4A463D]">{m.producto_texto || "—"}</td>
                   <td className="px-4 py-3 text-[#8A8578]">{m.nota || "—"}</td>
