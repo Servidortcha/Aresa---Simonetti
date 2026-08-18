@@ -43,6 +43,7 @@ export default function Stock2Page() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [query, setQuery] = useState("");
+  const [nombreFilter, setNombreFilter] = useState("todos");
   const [catFilter, setCatFilter] = useState("Todas");
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -68,14 +69,16 @@ export default function Stock2Page() {
   }, [rol, router]);
 
   const categorias = useMemo(() => ["Todas", ...new Set(insumos.map((i) => i.categoria).filter(Boolean))], [insumos]);
+  const nombres = useMemo(() => [...new Set(insumos.map((i) => i.nombre).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es")), [insumos]);
 
   const filtered = useMemo(
     () =>
       insumos
         .filter((i) => (verArchivados ? i.activo === false : i.activo !== false))
         .filter((i) => i.nombre.toLowerCase().includes(query.toLowerCase()) || (i.categoria || "").toLowerCase().includes(query.toLowerCase()))
-        .filter((i) => catFilter === "Todas" || i.categoria === catFilter),
-    [insumos, query, catFilter, verArchivados]
+        .filter((i) => catFilter === "Todas" || i.categoria === catFilter)
+        .filter((i) => nombreFilter === "todos" || i.nombre === nombreFilter),
+    [insumos, query, catFilter, verArchivados, nombreFilter]
   );
   const lowCount = insumos.filter((i) => i.activo !== false && i.stock < i.minimo).length;
 
@@ -239,6 +242,10 @@ export default function Stock2Page() {
           <Search size={15} color="#6B6558" />
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar insumo o categoría" className="flex-1 text-sm outline-none" />
         </div>
+        <select value={nombreFilter} onChange={(e) => setNombreFilter(e.target.value)} className="bg-white border border-line rounded-sm px-3 py-2 text-sm text-ink max-w-[220px]">
+          <option value="todos">Todos los nombres</option>
+          {nombres.map((n) => <option key={n} value={n}>{n}</option>)}
+        </select>
         <select value={catFilter} onChange={(e) => setCatFilter(e.target.value)} className="bg-white border border-line rounded-sm px-3 py-2 text-sm text-ink">
           {categorias.map((c) => <option key={c}>{c}</option>)}
         </select>
