@@ -36,7 +36,7 @@ function Field({ label, children }) {
 }
 
 export default function StockPage() {
-  const { rol } = useAuth();
+  const { rol, session } = useAuth();
   const router = useRouter();
   const soloLectura = rol === "taller_stock";
   const [insumos, setInsumos] = useState([]);
@@ -129,9 +129,52 @@ export default function StockPage() {
       stock: Number(form.stock) || 0,
       minimo: Number(form.minimo) || 0,
     };
-    const { error } = editingId
-      ? await supabase.from("insumos").update(payload).eq("id", editingId)
-      : await supabase.from("insumos").insert(payload);
+
+    let error;
+    if (editingId) {
+      const original = insumos.find((x) => x.id === editingId);
+      const stockOriginal = Number(original?.stock) || 0;
+      const stockNuevo = Number(form.stock) || 0;
+      const datos = {
+        nombre: form.nombre.trim(),
+        categoria: form.categoria,
+        unidad: form.unidad,
+        minimo: Number(form.minimo) || 0,
+      };
+      if (stockNuevo === stockOriginal) {
+        datos.stock = stockNuevo;
+        ({ error } = await supabase.from("insumos").update(datos).eq("id", editingId));
+      } else {
+        const { data: ajuste, error: errAjuste } = await supabase.rpc("ajustar_stock_insumo", {
+          p_insumo_id: editingId,
+          p_stock_nuevo: stockNuevo,
+          p_motivo: "Edición de stock (admin)",
+          p_usuario_email: session?.user?.email || null,
+        });
+        const r = ajuste?.[0];
+        if (errAjuste || !r?.ok) {
+          error = errAjuste || new Error(r?.mensaje || "No se pudo ajustar el stock.");
+        } else {
+          ({ error } = await supabase.from("insumos").update(datos).eq("id", editingId));
+        }
+      }
+    } else {
+      const stockNuevo = Number(form.stock) || 0;
+      const { data: nuevo, error: errInsert } = await supabase.from("insumos").insert(payload).select("id").single();
+      error = errInsert;
+      if (!error && stockNuevo > 0) {
+        const { error: errEntrada } = await supabase.rpc("registrar_movimiento_insumo", {
+          p_insumo_id: nuevo.id,
+          p_tipo: "entrada",
+          p_cantidad: stockNuevo,
+          p_producto_texto: null,
+          p_nota: "Stock inicial (alta de insumo)",
+          p_usuario_email: session?.user?.email || null,
+        });
+        error = errEntrada;
+      }
+    }
+
     setEnviando(false);
     if (error) {
       setError(error.message);
