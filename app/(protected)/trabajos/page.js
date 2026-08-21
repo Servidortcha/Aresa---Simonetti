@@ -56,8 +56,8 @@ export default function TrabajosPage() {
   const [confirmacion, setConfirmacion] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
-  const [archivoSeleccionado, setArchivoSeleccionado] = useState(null);
-  const [archivoActual, setArchivoActual] = useState(null);
+  const [archivosSeleccionados, setArchivosSeleccionados] = useState([]);
+  const [archivosActuales, setArchivosActuales] = useState([]);
   const [enviando, setEnviando] = useState(false);
   const [filtroTipo, setFiltroTipo] = useState("Todos");
   const [filtroEstado, setFiltroEstado] = useState("Todos");
@@ -104,8 +104,8 @@ export default function TrabajosPage() {
   function abrirNuevo() {
     setEditingId(null);
     setForm(emptyForm);
-    setArchivoSeleccionado(null);
-    setArchivoActual(null);
+    setArchivosSeleccionados([]);
+    setArchivosActuales([]);
     setError(null);
   }
 
@@ -124,8 +124,8 @@ export default function TrabajosPage() {
       confirmado: t.confirmado,
       fabricacion_id: t.fabricacion_id != null ? String(t.fabricacion_id) : "",
     });
-    setArchivoSeleccionado(null);
-    setArchivoActual(t.archivo_dxf || null);
+    setArchivosSeleccionados([]);
+    setArchivosActuales(Array.isArray(t.archivo_dxf) ? t.archivo_dxf : t.archivo_dxf ? [t.archivo_dxf] : []);
     setError(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -136,21 +136,25 @@ export default function TrabajosPage() {
     setError(null);
     setEnviando(true);
 
-    // 1. Si hay un archivo nuevo seleccionado, subirlo primero.
-    let archivo_dxf = editingId ? undefined : null; // undefined = no tocar el campo al editar si no se sube uno nuevo
-    if (archivoSeleccionado) {
-      const nombreSeguro = archivoSeleccionado.name
-        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-        .replace(/[^a-zA-Z0-9._-]/g, "_");
-      const path = `${Date.now()}-${nombreSeguro}`;
-      const { error: uploadError } = await supabase.storage.from("trabajos-archivos").upload(path, archivoSeleccionado);
-      if (uploadError) {
-        setError("Error al subir el archivo: " + uploadError.message);
-        setEnviando(false);
-        return;
+    // 1. Subir los archivos DXF nuevos seleccionados.
+    let archivo_dxf = editingId ? undefined : []; // undefined = no tocar el campo al editar si no se sube uno nuevo
+    if (archivosSeleccionados.length > 0) {
+      const lista = editingId ? [...archivosActuales] : [];
+      for (const file of archivosSeleccionados) {
+        const nombreSeguro = file.name
+          .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+          .replace(/[^a-zA-Z0-9._-]/g, "_");
+        const path = `${Date.now()}-${nombreSeguro}`;
+        const { error: uploadError } = await supabase.storage.from("trabajos-archivos").upload(path, file);
+        if (uploadError) {
+          setError("Error al subir el archivo: " + uploadError.message);
+          setEnviando(false);
+          return;
+        }
+        const { data: pub } = supabase.storage.from("trabajos-archivos").getPublicUrl(path);
+        lista.push({ name: file.name, url: pub.publicUrl });
       }
-      const { data: pub } = supabase.storage.from("trabajos-archivos").getPublicUrl(path);
-      archivo_dxf = { name: archivoSeleccionado.name, url: pub.publicUrl };
+      archivo_dxf = lista;
     }
 
     const metros_cuadrados = esLaser ? calcularM2(form.largo_mm, form.ancho_mm, form.cantidad) : null;
@@ -186,8 +190,8 @@ export default function TrabajosPage() {
     }
     setForm(emptyForm);
     setEditingId(null);
-    setArchivoSeleccionado(null);
-    setArchivoActual(null);
+    setArchivosSeleccionados([]);
+    setArchivosActuales([]);
     setConfirmacion(editingId ? "Trabajo actualizado" : "Trabajo registrado");
     setTimeout(() => setConfirmacion(null), 3000);
     cargar();
@@ -342,16 +346,37 @@ export default function TrabajosPage() {
           </Field>
 
           {esLaser && (
-            <Field label={editingId ? "Reemplazar archivo DXF (opcional)" : "Archivo DXF para el operador (opcional)"}>
+            <Field label={editingId ? "Agregar archivos DXF (opcional)" : "Archivos DXF para el operador (opcional)"}>
               <label className="flex items-center gap-2 border border-dashed border-line rounded-sm px-3 py-2.5 text-sm text-[#6B6558] cursor-pointer hover:bg-[#F2EEE3] transition-colors">
                 <Paperclip size={15} />
-                {archivoSeleccionado ? archivoSeleccionado.name : "Elegir archivo .dxf"}
-                <input type="file" accept=".dxf" className="hidden" onChange={(e) => setArchivoSeleccionado(e.target.files?.[0] || null)} />
+                {archivosSeleccionados.length > 0 ? `${archivosSeleccionados.length} archivo(s) nuevo(s)` : "Elegir archivos .dxf (podés elegir varios)"}
+                <input
+                  type="file"
+                  accept=".dxf"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => setArchivosSeleccionados(Array.from(e.target.files || []))}
+                />
               </label>
-              {editingId && archivoActual && !archivoSeleccionado && (
-                <p className="text-xs text-[#8A8578] mt-1">
-                  Ya tiene <a href={archivoActual.url} target="_blank" rel="noopener noreferrer" className="underline">{archivoActual.name}</a> cargado — elegí uno nuevo solo si querés reemplazarlo.
-                </p>
+              {editingId && archivosActuales.length > 0 && (
+                <ul className="mt-2 space-y-1">
+                  {archivosActuales.map((a, idx) => (
+                    <li key={`a${idx}`} className="flex items-center justify-between bg-[#F2EEE3] rounded-sm px-2.5 py-1.5 text-xs text-[#4A463D]">
+                      <a href={a.url} target="_blank" rel="noopener noreferrer" className="truncate hover:underline">{a.name}</a>
+                      <button type="button" onClick={() => setArchivosActuales((prev) => prev.filter((_, i) => i !== idx))} className="text-[#C7522A] hover:text-red ml-2 shrink-0" title="Quitar archivo">✕</button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {archivosSeleccionados.length > 0 && (
+                <ul className="mt-2 space-y-1">
+                  {archivosSeleccionados.map((f, idx) => (
+                    <li key={`s${idx}`} className="flex items-center justify-between bg-[#F7F4EC] rounded-sm px-2.5 py-1.5 text-xs text-[#4A463D]">
+                      <span className="truncate pr-2">{f.name}</span>
+                      <button type="button" onClick={() => setArchivosSeleccionados((prev) => prev.filter((_, i) => i !== idx))} className="text-[#C7522A] hover:text-red shrink-0" title="Quitar">✕</button>
+                    </li>
+                  ))}
+                </ul>
               )}
             </Field>
           )}
@@ -473,11 +498,11 @@ export default function TrabajosPage() {
                         <Printer size={15} /> Tarjeta
                       </button>
                     </div>
-                    {t.archivo_dxf && (
-                      <a href={t.archivo_dxf.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-[#3B5166] hover:underline shrink-0">
-                        <FileText size={14} /> DXF
+                    {(Array.isArray(t.archivo_dxf) ? t.archivo_dxf : t.archivo_dxf ? [t.archivo_dxf] : []).map((a, i) => (
+                      <a key={i} href={a.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-[#3B5166] hover:underline shrink-0">
+                        <FileText size={14} /> DXF {i + 1}
                       </a>
-                    )}
+                    ))}
                   </div>
                 </div>
               ))}
@@ -540,10 +565,14 @@ export default function TrabajosPage() {
                     </td>
                     <td className="px-4 py-3 font-mono whitespace-nowrap">{t.metros_cuadrados != null ? `${Number(t.metros_cuadrados).toFixed(3)} m²` : "—"}</td>
                     <td className="px-4 py-3">
-                      {t.archivo_dxf ? (
-                        <a href={t.archivo_dxf.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-[#3B5166] hover:underline">
-                          <FileText size={13} /> Descargar
-                        </a>
+                      {(Array.isArray(t.archivo_dxf) ? t.archivo_dxf : t.archivo_dxf ? [t.archivo_dxf] : []).length > 0 ? (
+                        <div className="flex flex-col gap-0.5">
+                          {(Array.isArray(t.archivo_dxf) ? t.archivo_dxf : [t.archivo_dxf]).map((a, i) => (
+                            <a key={i} href={a.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-[#3B5166] hover:underline">
+                              <FileText size={13} /> DXF {i + 1}
+                            </a>
+                          ))}
+                        </div>
                       ) : "—"}
                     </td>
                     <td className="px-4 py-3">
