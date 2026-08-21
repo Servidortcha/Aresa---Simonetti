@@ -44,6 +44,12 @@ function nro(n) {
   return n != null ? "T-" + String(n).padStart(4, "0") : null;
 }
 
+function archivosDe(t) {
+  const a = t?.archivo_dxf;
+  if (Array.isArray(a)) return a;
+  return a ? [a] : [];
+}
+
 export default function TrabajosPage() {
   const { rol, session } = useAuth();
   const router = useRouter();
@@ -62,6 +68,7 @@ export default function TrabajosPage() {
   const [filtroTipo, setFiltroTipo] = useState("Todos");
   const [filtroEstado, setFiltroEstado] = useState("Todos");
   const [tarjeta, setTarjeta] = useState(null);
+  const [archivosAbiertos, setArchivosAbiertos] = useState(null);
 
   const esLaser = form.tipo === "Corte Láser";
   const m2Preview = useMemo(() => calcularM2(form.largo_mm, form.ancho_mm, form.cantidad), [form.largo_mm, form.ancho_mm, form.cantidad]);
@@ -498,11 +505,11 @@ export default function TrabajosPage() {
                         <Printer size={15} /> Tarjeta
                       </button>
                     </div>
-                    {(Array.isArray(t.archivo_dxf) ? t.archivo_dxf : t.archivo_dxf ? [t.archivo_dxf] : []).map((a, i) => (
-                      <a key={i} href={a.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-[#3B5166] hover:underline shrink-0">
-                        <FileText size={14} /> DXF {i + 1}
-                      </a>
-                    ))}
+                    {archivosDe(t).length > 0 && (
+                      <button onClick={() => setArchivosAbiertos(t)} className="flex items-center gap-1 text-xs text-[#3B5166] hover:underline shrink-0">
+                        <FileText size={14} /> +{archivosDe(t).length}
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -565,14 +572,10 @@ export default function TrabajosPage() {
                     </td>
                     <td className="px-4 py-3 font-mono whitespace-nowrap">{t.metros_cuadrados != null ? `${Number(t.metros_cuadrados).toFixed(3)} m²` : "—"}</td>
                     <td className="px-4 py-3">
-                      {(Array.isArray(t.archivo_dxf) ? t.archivo_dxf : t.archivo_dxf ? [t.archivo_dxf] : []).length > 0 ? (
-                        <div className="flex flex-col gap-0.5">
-                          {(Array.isArray(t.archivo_dxf) ? t.archivo_dxf : [t.archivo_dxf]).map((a, i) => (
-                            <a key={i} href={a.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-[#3B5166] hover:underline">
-                              <FileText size={13} /> DXF {i + 1}
-                            </a>
-                          ))}
-                        </div>
+                      {archivosDe(t).length > 0 ? (
+                        <button onClick={() => setArchivosAbiertos(t)} className="inline-flex items-center gap-1 text-xs text-[#3B5166] hover:underline">
+                          <FileText size={13} /> +{archivosDe(t).length}
+                        </button>
                       ) : "—"}
                     </td>
                     <td className="px-4 py-3">
@@ -631,6 +634,31 @@ export default function TrabajosPage() {
             </tbody>
           </table>
           <div className="pc-footer">Powered by Aresa</div>
+        </div>
+      )}
+
+      {archivosAbiertos && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setArchivosAbiertos(null)}>
+          <div className="bg-card w-full max-w-sm rounded-sm border border-line shadow-2xl p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-display text-lg font-semibold">Archivos DXF</h3>
+              <button onClick={() => setArchivosAbiertos(null)} className="text-[#8A8578] hover:text-ink" aria-label="Cerrar">
+                <X size={18} />
+              </button>
+            </div>
+            <p className="text-xs text-[#6B6558] mb-3">
+              {archivosAbiertos.cliente || "Sin cliente"} · {archivosDe(archivosAbiertos).length} archivo{archivosDe(archivosAbiertos).length !== 1 ? "s" : ""}
+            </p>
+            <ul className="space-y-2">
+              {archivosDe(archivosAbiertos).map((a, i) => (
+                <li key={i}>
+                  <a href={a.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-[#3B5166] hover:underline bg-[#F7F4EC] rounded-sm px-3 py-2">
+                    <FileText size={14} /> <span className="truncate">{a.name}</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       )}
     </>
