@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
 import { useAuth } from "../../../lib/AuthContext";
-import { AlertTriangle, Search, Plus, X, Pencil, Trash2, Download, Upload, ClipboardCheck, FileSpreadsheet } from "lucide-react";
+import { AlertTriangle, Search, Plus, X, Pencil, Trash2, Download, Upload, ClipboardCheck, FileSpreadsheet, Wrench } from "lucide-react";
 
 const CATS = ["Químicos", "Empaques", "Metales", "Textiles", "Seguridad", "Insumos para Fabricación", "Herramientas"];
 const UNITS = ["kg", "L", "unid", "m"];
@@ -58,6 +58,8 @@ export default function StockPage() {
   const [showControl, setShowControl] = useState(false);
   const [conteos, setConteos] = useState({});
   const [controlGuardando, setControlGuardando] = useState(false);
+  const [herramientasPorCaja, setHerramientasPorCaja] = useState({});
+  const [nuevoTool, setNuevoTool] = useState({});
 
   async function loadInsumos() {
     setLoading(true);
@@ -70,6 +72,7 @@ export default function StockPage() {
   useEffect(() => {
     if (!rol) return;
     loadInsumos();
+    cargarHerramientas();
   }, [rol]);
 
   useEffect(() => {
@@ -216,6 +219,36 @@ export default function StockPage() {
       return;
     }
     loadInsumos();
+  }
+
+  async function cargarHerramientas() {
+    const { data, error } = await supabase.from("caja_herramientas").select("*").order("herramienta");
+    if (error) { setError(error.message); return; }
+    const map = {};
+    (data || []).forEach((r) => { (map[r.caja_id] = map[r.caja_id] || []).push(r); });
+    setHerramientasPorCaja(map);
+  }
+
+  async function agregarHerramienta(cajaId) {
+    const t = nuevoTool[cajaId] || {};
+    if (!t.herramienta?.trim()) { setError("Escribí el nombre de la herramienta."); return; }
+    const cant = Number(t.cantidad) || 0;
+    if (!cant || cant <= 0) { setError("La cantidad tiene que ser mayor a 0."); return; }
+    const { error } = await supabase.from("caja_herramientas").insert({
+      caja_id: cajaId,
+      herramienta: t.herramienta.trim(),
+      cantidad: cant,
+      unidad: t.unidad?.trim() || "unid",
+    });
+    if (error) { setError(error.message); return; }
+    setNuevoTool((prev) => ({ ...prev, [cajaId]: { herramienta: "", cantidad: "", unidad: "unid" } }));
+    cargarHerramientas();
+  }
+
+  async function quitarHerramienta(id) {
+    const { error } = await supabase.from("caja_herramientas").delete().eq("id", id);
+    if (error) { setError(error.message); return; }
+    cargarHerramientas();
   }
 
   async function descargarPlantillaCajas() {
@@ -435,6 +468,36 @@ export default function StockPage() {
                 </div>
                 <StockGauge stock={i.stock} minimo={i.minimo} />
               </div>
+              <div className="mt-3 pt-3 border-t border-[#EFEBE0]">
+                <p className="text-[10px] uppercase tracking-wide text-[#8A8578] mb-1.5 flex items-center gap-1"><Wrench size={12} /> Herramientas en esta caja ({(herramientasPorCaja[i.id] || []).length})</p>
+                {(herramientasPorCaja[i.id] || []).length > 0 ? (
+                  <ul className="space-y-1 mb-2">
+                    {(herramientasPorCaja[i.id] || []).map((h) => (
+                      <li key={h.id} className="flex items-center justify-between gap-2 text-sm bg-[#F7F4EC] rounded-sm px-2.5 py-1.5">
+                        <span className="truncate">{h.herramienta} <span className="text-[#8A8578]">· {h.cantidad} {h.unidad}</span></span>
+                        {!soloLectura && (
+                          <button onClick={() => quitarHerramienta(h.id)} className="text-[#C7522A] hover:text-red p-1 shrink-0" title="Quitar"><Trash2 size={13} /></button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-[#8A8578] mb-2">Sin herramientas cargadas.</p>
+                )}
+                {!soloLectura && (
+                  <div className="flex items-end gap-2">
+                    <label className="block flex-1 min-w-0">
+                      <span className="block text-[10px] uppercase tracking-wide text-[#8A8578] mb-1">Herramienta</span>
+                      <input className={inputCls + " !py-1.5"} value={nuevoTool[i.id]?.herramienta || ""} onChange={(e) => setNuevoTool((prev) => ({ ...prev, [i.id]: { ...prev[i.id], herramienta: e.target.value, unidad: prev[i.id]?.unidad || "unid", cantidad: prev[i.id]?.cantidad || "" } }))} placeholder="Ej. Martillo" />
+                    </label>
+                    <label className="block w-16 shrink-0">
+                      <span className="block text-[10px] uppercase tracking-wide text-[#8A8578] mb-1">Cant.</span>
+                      <input type="number" step="1" min="1" className={inputCls + " !py-1.5 text-center"} value={nuevoTool[i.id]?.cantidad || ""} onChange={(e) => setNuevoTool((prev) => ({ ...prev, [i.id]: { ...prev[i.id], cantidad: e.target.value } }))} />
+                    </label>
+                    <button onClick={() => agregarHerramienta(i.id)} className="inline-flex items-center gap-1 bg-ink text-paper px-3 py-1.5 rounded-sm text-sm font-medium hover:bg-[#333731] shrink-0"><Plus size={14} /> Agregar</button>
+                  </div>
+                )}
+              </div>
             </div>
           ))}
         {!loading && filtered.length === 0 && <p className="text-center text-sm text-[#8A8578] py-8">Sin resultados</p>}
@@ -455,32 +518,69 @@ export default function StockPage() {
           <tbody>
             {loading && <tr><td colSpan={soloLectura ? 4 : 5} className="px-4 py-8 text-center text-sm text-[#8A8578]">Cargando...</td></tr>}
             {!loading && filtered.map((i, idx) => (
-              <tr key={i.id} className={`${idx % 2 === 1 ? "bg-[#F7F4EC]" : ""} ${idx !== filtered.length - 1 ? "border-b border-[#EFEBE0]" : ""}`}>
-                <td className="px-4 py-3">
-                  <div className="font-medium">{i.nombre}</div>
-                </td>
-                <td className="px-4 py-3 text-[#4A463D]">{i.categoria}</td>
-                <td className="px-4 py-3 font-mono">
-                  {i.stock} <span className="text-[#B0AA9A]">/ {i.minimo}</span> <span className="text-[#8A8578] text-xs">{i.unidad}</span>
-                </td>
-                <td className="px-4 py-3"><StockGauge stock={i.stock} minimo={i.minimo} /></td>
-                {!soloLectura && (
+              <React.Fragment key={i.id}>
+                <tr className={`${idx % 2 === 1 ? "bg-[#F7F4EC]" : ""} border-b border-[#EFEBE0]`}>
                   <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-3">
-                      <button onClick={() => openEditar(i)} className="text-[#4A4B4D] hover:opacity-70" title="Editar">
-                        <Pencil size={15} />
-                      </button>
-                      {verArchivados ? (
-                        <button onClick={() => reactivar(i)} className="text-green text-xs font-medium hover:underline">Reactivar</button>
-                      ) : (
-                        <button onClick={() => setArchiving(i)} className="text-red hover:opacity-70" title="Archivar">
-                          <Trash2 size={15} />
-                        </button>
-                      )}
-                    </div>
+                    <div className="font-medium">{i.nombre}</div>
                   </td>
-                )}
-              </tr>
+                  <td className="px-4 py-3 text-[#4A463D]">{i.categoria}</td>
+                  <td className="px-4 py-3 font-mono">
+                    {i.stock} <span className="text-[#B0AA9A]">/ {i.minimo}</span> <span className="text-[#8A8578] text-xs">{i.unidad}</span>
+                  </td>
+                  <td className="px-4 py-3"><StockGauge stock={i.stock} minimo={i.minimo} /></td>
+                  {!soloLectura && (
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-3">
+                        <button onClick={() => openEditar(i)} className="text-[#4A4B4D] hover:opacity-70" title="Editar">
+                          <Pencil size={15} />
+                        </button>
+                        {verArchivados ? (
+                          <button onClick={() => reactivar(i)} className="text-green text-xs font-medium hover:underline">Reactivar</button>
+                        ) : (
+                          <button onClick={() => setArchiving(i)} className="text-red hover:opacity-70" title="Archivar">
+                            <Trash2 size={15} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  )}
+                </tr>
+                <tr className={`${idx % 2 === 1 ? "bg-[#F7F4EC]" : ""} ${idx !== filtered.length - 1 ? "border-b border-[#EFEBE0]" : ""}`}>
+                  <td colSpan={soloLectura ? 4 : 5} className="px-4 py-3 bg-[#FDFBF5]">
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <Wrench size={13} className="text-[#8A8578]" />
+                      <span className="text-[10px] uppercase tracking-wide text-[#8A8578]">Herramientas en esta caja ({(herramientasPorCaja[i.id] || []).length})</span>
+                    </div>
+                    {(herramientasPorCaja[i.id] || []).length > 0 ? (
+                      <ul className="space-y-1 mb-2">
+                        {(herramientasPorCaja[i.id] || []).map((h) => (
+                          <li key={h.id} className="flex items-center justify-between gap-2 text-sm bg-white border border-[#EFEBE0] rounded-sm px-2.5 py-1">
+                            <span className="truncate">{h.herramienta} <span className="text-[#8A8578]">· {h.cantidad} {h.unidad}</span></span>
+                            {!soloLectura && (
+                              <button onClick={() => quitarHerramienta(h.id)} className="text-[#C7522A] hover:text-red p-1 shrink-0" title="Quitar"><Trash2 size={13} /></button>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-xs text-[#8A8578] mb-2">Sin herramientas cargadas.</p>
+                    )}
+                    {!soloLectura && (
+                      <div className="flex items-end gap-2">
+                        <label className="block flex-1 min-w-0">
+                          <span className="block text-[10px] uppercase tracking-wide text-[#8A8578] mb-1">Herramienta</span>
+                          <input className={inputCls + " !py-1.5"} value={nuevoTool[i.id]?.herramienta || ""} onChange={(e) => setNuevoTool((prev) => ({ ...prev, [i.id]: { ...prev[i.id], herramienta: e.target.value, unidad: prev[i.id]?.unidad || "unid", cantidad: prev[i.id]?.cantidad || "" } }))} placeholder="Ej. Martillo" />
+                        </label>
+                        <label className="block w-20 shrink-0">
+                          <span className="block text-[10px] uppercase tracking-wide text-[#8A8578] mb-1">Cant.</span>
+                          <input type="number" step="1" min="1" className={inputCls + " !py-1.5 text-center"} value={nuevoTool[i.id]?.cantidad || ""} onChange={(e) => setNuevoTool((prev) => ({ ...prev, [i.id]: { ...prev[i.id], cantidad: e.target.value } }))} />
+                        </label>
+                        <button onClick={() => agregarHerramienta(i.id)} className="inline-flex items-center gap-1 bg-ink text-paper px-3 py-1.5 rounded-sm text-sm font-medium hover:bg-[#333731] shrink-0"><Plus size={14} /> Agregar</button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              </React.Fragment>
             ))}
             {!loading && filtered.length === 0 && (
               <tr><td colSpan={soloLectura ? 4 : 5} className="px-4 py-8 text-center text-sm text-[#8A8578]">Sin resultados</td></tr>
