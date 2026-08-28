@@ -397,13 +397,13 @@ export default function StockPage() {
           <button onClick={exportarExcel} className="flex items-center gap-1.5 bg-white border border-line text-ink px-4 py-2 rounded-sm text-sm font-medium hover:bg-[#F2EEE3] transition-colors">
             <Download size={16} /> Exportar a Excel
           </button>
+          <button onClick={abrirControl} className="flex items-center gap-1.5 bg-white border border-line text-ink px-4 py-2 rounded-sm text-sm font-medium hover:bg-[#F2EEE3] transition-colors">
+            <ClipboardCheck size={16} /> Control de stock
+          </button>
           {!soloLectura && (
             <>
               <button onClick={() => setShowImport(true)} className="flex items-center gap-1.5 bg-white border border-line text-ink px-4 py-2 rounded-sm text-sm font-medium hover:bg-[#F2EEE3] transition-colors">
                 <Upload size={16} /> Importar Excel
-              </button>
-              <button onClick={abrirControl} className="flex items-center gap-1.5 bg-white border border-line text-ink px-4 py-2 rounded-sm text-sm font-medium hover:bg-[#F2EEE3] transition-colors">
-                <ClipboardCheck size={16} /> Control de stock
               </button>
               <button onClick={openNuevo} className="flex items-center gap-1.5 bg-ink text-paper px-4 py-2 rounded-sm text-sm font-medium hover:bg-[#333731] transition-colors">
                 <Plus size={16} /> Nuevo insumo
