@@ -52,6 +52,7 @@ export default function StockPage() {
   const [enviando, setEnviando] = useState(false);
   const [archiving, setArchiving] = useState(null);
   const [verArchivados, setVerArchivados] = useState(false);
+  const [depositoSel, setDepositoSel] = useState("Principal");
   const [showImport, setShowImport] = useState(false);
   const [importPreview, setImportPreview] = useState(null);
   const [importando, setImportando] = useState(false);
