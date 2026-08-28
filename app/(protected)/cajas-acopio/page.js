@@ -474,7 +474,7 @@ export default function StockPage() {
                   <ul className="space-y-1 mb-2">
                     {(herramientasPorCaja[i.id] || []).map((h) => (
                       <li key={h.id} className="flex items-center justify-between gap-2 text-sm bg-[#F7F4EC] rounded-sm px-2.5 py-1.5">
-                        <span className="truncate">{h.herramienta} <span className="text-[#8A8578]">· {h.cantidad} {h.unidad}</span></span>
+                        <span className="truncate"><span className="font-mono text-[#6B6558]">{h.cantidad} {h.unidad}</span> <span className="text-[#8A8578]">·</span> {h.herramienta}</span>
                         {!soloLectura && (
                           <button onClick={() => quitarHerramienta(h.id)} className="text-[#C7522A] hover:text-red p-1 shrink-0" title="Quitar"><Trash2 size={13} /></button>
                         )}
@@ -555,7 +555,7 @@ export default function StockPage() {
                       <ul className="space-y-1 mb-2">
                         {(herramientasPorCaja[i.id] || []).map((h) => (
                           <li key={h.id} className="flex items-center justify-between gap-2 text-sm bg-white border border-[#EFEBE0] rounded-sm px-2.5 py-1">
-                            <span className="truncate">{h.herramienta} <span className="text-[#8A8578]">· {h.cantidad} {h.unidad}</span></span>
+                            <span className="truncate"><span className="font-mono text-[#6B6558]">{h.cantidad} {h.unidad}</span> <span className="text-[#8A8578]">·</span> {h.herramienta}</span>
                             {!soloLectura && (
                               <button onClick={() => quitarHerramienta(h.id)} className="text-[#C7522A] hover:text-red p-1 shrink-0" title="Quitar"><Trash2 size={13} /></button>
                             )}
