@@ -38,7 +38,7 @@ function Field({ label, children }) {
 export default function StockPage() {
   const { rol, session } = useAuth();
   const router = useRouter();
-  const soloLectura = rol === "taller_stock";
+  const soloLectura = rol === "taller_stock" || rol === "encargado";
   const [insumos, setInsumos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -54,18 +54,22 @@ export default function StockPage() {
 
   async function loadInsumos() {
     setLoading(true);
-    const { data, error } = await supabase.from("insumos").select("*").eq("deposito", "Principal").order("nombre");
+    const q = supabase.from("insumos").select("*").order("nombre");
+    const { data, error } = rol === "encargado"
+      ? await q.eq("deposito", "Gral. Villegas")
+      : await q.eq("deposito", "Principal");
     if (error) setError(error.message);
     else setInsumos(data);
     setLoading(false);
   }
 
   useEffect(() => {
+    if (!rol) return;
     loadInsumos();
-  }, []);
+  }, [rol]);
 
   useEffect(() => {
-    if (rol && rol !== "admin" && rol !== "taller_stock") router.replace("/ingreso-egreso");
+    if (rol && rol !== "admin" && rol !== "taller_stock" && rol !== "encargado") router.replace("/ingreso-egreso");
   }, [rol, router]);
 
   const categorias = useMemo(() => ["Todas", ...new Set(insumos.map((i) => i.categoria).filter(Boolean))], [insumos]);
@@ -209,13 +213,13 @@ export default function StockPage() {
     loadInsumos();
   }
 
-  if (rol && rol !== "admin" && rol !== "taller_stock") return null;
+  if (rol && rol !== "admin" && rol !== "taller_stock" && rol !== "encargado") return null;
 
   return (
     <>
       <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
         <div>
-          <h1 className="font-display text-3xl font-semibold">Insumos</h1>
+          <h1 className="font-display text-3xl font-semibold">{rol === "encargado" ? "Cajas de herramientas — Gral. Villegas" : "Insumos"}</h1>
           {!loading && (lowCount > 0 ? (
             <p className="text-sm text-red flex items-center gap-1 mt-0.5"><AlertTriangle size={14} /> {lowCount} insumo{lowCount > 1 ? "s" : ""} por debajo del mínimo</p>
           ) : (
