@@ -4,9 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
 import { useAuth } from "../../../lib/AuthContext";
-import { AlertTriangle, Search, Plus, X, Pencil, Trash2, Download } from "lucide-react";
+import { AlertTriangle, Search, Plus, X, Pencil, Trash2, Download, Upload, ClipboardCheck, FileSpreadsheet } from "lucide-react";
 
-const CATS = ["Químicos", "Empaques", "Metales", "Textiles", "Seguridad", "Insumos para Fabricación"];
+const CATS = ["Químicos", "Empaques", "Metales", "Textiles", "Seguridad", "Insumos para Fabricación", "Herramientas"];
 const UNITS = ["kg", "L", "unid", "m"];
 const emptyForm = { nombre: "", categoria: "", unidad: UNITS[0], stock: "", minimo: "" };
 
@@ -38,6 +38,7 @@ function Field({ label, children }) {
 export default function StockPage() {
   const { rol, session } = useAuth();
   const router = useRouter();
+  const esAdmin = rol === "admin";
   const soloLectura = rol === "taller_stock" || rol === "encargado";
   const [insumos, setInsumos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -51,13 +52,22 @@ export default function StockPage() {
   const [enviando, setEnviando] = useState(false);
   const [archiving, setArchiving] = useState(null);
   const [verArchivados, setVerArchivados] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [importPreview, setImportPreview] = useState(null);
+  const [importando, setImportando] = useState(false);
+  const [showControl, setShowControl] = useState(false);
+  const [conteos, setConteos] = useState({});
+  const [controlGuardando, setControlGuardando] = useState(false);
 
   async function loadInsumos() {
     setLoading(true);
     const q = supabase.from("insumos").select("*").order("nombre");
-    const { data, error } = rol === "encargado"
-      ? await q.eq("deposito", "Gral. Villegas")
-      : await q.eq("deposito", "Principal");
+    let data, error;
+    if (rol === "encargado") {
+      ({ data, error } = await q.eq("deposito", "Gral. Villegas"));
+    } else {
+      ({ data, error } = await q.eq("deposito", depositoSel));
+    }
     if (error) setError(error.message);
     else setInsumos(data);
     setLoading(false);
@@ -66,7 +76,7 @@ export default function StockPage() {
   useEffect(() => {
     if (!rol) return;
     loadInsumos();
-  }, [rol]);
+  }, [rol, depositoSel]);
 
   useEffect(() => {
     if (rol && rol !== "admin" && rol !== "taller_stock" && rol !== "encargado") router.replace("/ingreso-egreso");
@@ -135,6 +145,7 @@ export default function StockPage() {
       unidad: form.unidad,
       stock: Number(form.stock) || 0,
       minimo: Number(form.minimo) || 0,
+      deposito: depositoSel,
     };
 
     let error;
@@ -213,6 +224,135 @@ export default function StockPage() {
     loadInsumos();
   }
 
+  async function descargarPlantillaCajas() {
+    const XLSX = await import("xlsx");
+    const filas = [
+      { Nombre: "Caja de herramientas 1 - Gral. Villegas", "Categoría": "Herramientas", Unidad: "unid", Stock: 1, "Stock mínimo": 1, Depósito: "Gral. Villegas" },
+      { Nombre: "Caja de herramientas 2 - Gral. Villegas", "Categoría": "Herramientas", Unidad: "unid", Stock: 1, "Stock mínimo": 1, Depósito: "Gral. Villegas" },
+    ];
+    const hoja = XLSX.utils.json_to_sheet(filas);
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, hoja, "Cajas");
+    XLSX.writeFile(libro, "plantilla-cajas-herramientas.xlsx");
+  }
+
+  async function handleImportFile(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError(null);
+    setImportPreview(null);
+    const XLSX = await import("xlsx");
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf);
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+    const normalizar = (s) => String(s || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const filas = [];
+    const errores = [];
+    rows.forEach((r, idx) => {
+      const nombre = r["Nombre"] ?? r["nombre"] ?? r["NOMBRE"] ?? r["Insumo"] ?? r["insumo"] ?? "";
+      const categoria = r["Categoría"] ?? r["Categoria"] ?? r["categoria"] ?? "Herramientas";
+      const unidad = r["Unidad"] ?? r["unidad"] ?? r["UNIDAD"] ?? "unid";
+      const stock = r["Stock"] ?? r["stock"] ?? r["STOCK"] ?? 0;
+      const minimo = r["Stock mínimo"] ?? r["Stock minimo"] ?? r["Minimo"] ?? r["minimo"] ?? 1;
+      const deposito = r["Depósito"] ?? r["Deposito"] ?? r["deposito"] ?? "Gral. Villegas";
+      if (!String(nombre).trim()) {
+        errores.push(`Fila ${idx + 2}: falta el nombre`);
+        return;
+      }
+      filas.push({
+        nombre: String(nombre).trim(),
+        categoria: String(categoria).trim() || "Herramientas",
+        unidad: String(unidad).trim() || "unid",
+        stock: Number(stock) || 0,
+        minimo: Number(minimo) || 0,
+        deposito: String(deposito).trim() || "Gral. Villegas",
+      });
+    });
+    if (filas.length === 0 && errores.length === 0) errores.push("La planilla no tiene filas válidas.");
+    setImportPreview({ filas, errores });
+    e.target.value = "";
+  }
+
+  async function confirmarImport() {
+    if (!importPreview || importPreview.filas.length === 0) return;
+    setImportando(true);
+    setError(null);
+    let ok = 0;
+    let errores = [];
+    for (const f of importPreview.filas) {
+      const { data: existente } = await supabase.from("insumos").select("id, stock").eq("nombre", f.nombre).eq("deposito", f.deposito).maybeSingle();
+      if (existente) {
+        const { error: errUpd } = await supabase.from("insumos").update({ categoria: f.categoria, unidad: f.unidad, minimo: f.minimo }).eq("id", existente.id);
+        if (errUpd) { errores.push(`${f.nombre}: ${errUpd.message}`); continue; }
+        const stockActual = Number(existente.stock) || 0;
+        if (stockActual !== f.stock) {
+          const { data: ajuste, error: errAjuste } = await supabase.rpc("ajustar_stock_insumo", {
+            p_insumo_id: existente.id,
+            p_stock_nuevo: f.stock,
+            p_motivo: "Carga masiva desde Excel (cajas)",
+            p_usuario_email: session?.user?.email || null,
+          });
+          const r = ajuste?.[0];
+          if (errAjuste || !r?.ok) { errores.push(`${f.nombre}: ${errAjuste?.message || r?.mensaje}`); continue; }
+        }
+        ok++;
+      } else {
+        const { data: nuevo, error: errIns } = await supabase.from("insumos").insert({ nombre: f.nombre, categoria: f.categoria, unidad: f.unidad, stock: f.stock, minimo: f.minimo, deposito: f.deposito }).select("id").single();
+        if (errIns) { errores.push(`${f.nombre}: ${errIns.message}`); continue; }
+        if (f.stock > 0) {
+          const { error: errMov } = await supabase.rpc("registrar_movimiento_insumo", {
+            p_insumo_id: nuevo.id, p_tipo: "entrada", p_cantidad: f.stock, p_producto_texto: null, p_nota: "Stock inicial (carga masiva Excel)", p_usuario_email: session?.user?.email || null,
+          });
+          if (errMov) errores.push(`${f.nombre}: ${errMov.message}`);
+        }
+        ok++;
+      }
+    }
+    setImportando(false);
+    if (errores.length > 0) setError(errores.join(" | "));
+    if (ok > 0) {
+      setImportPreview(null);
+      setShowImport(false);
+      loadInsumos();
+    }
+  }
+
+  function abrirControl() {
+    const m = {};
+    filtered.filter((i) => i.activo !== false).forEach((i) => { m[i.id] = String(i.stock); });
+    setConteos(m);
+    setShowControl(true);
+  }
+
+  async function guardarControl() {
+    setControlGuardando(true);
+    setError(null);
+    let ok = 0;
+    const errores = [];
+    for (const i of filtered.filter((x) => x.activo !== false)) {
+      const contado = conteos[i.id];
+      if (contado === "" || contado == null) continue;
+      const val = Number(contado);
+      if (Number.isNaN(val) || val < 0) { errores.push(`${i.nombre}: valor inválido`); continue; }
+      if (val === Number(i.stock)) continue;
+      const { data, error: err } = await supabase.rpc("ajustar_stock_insumo", {
+        p_insumo_id: i.id, p_stock_nuevo: val, p_motivo: "Control de stock (conteo físico)", p_usuario_email: session?.user?.email || null,
+      });
+      const r = data?.[0];
+      if (err || !r?.ok) errores.push(`${i.nombre}: ${err?.message || r?.mensaje}`);
+      else ok++;
+    }
+    setControlGuardando(false);
+    if (errores.length > 0) setError(errores.join(" | "));
+    if (ok > 0) {
+      setShowControl(false);
+      loadInsumos();
+    } else if (errores.length === 0) {
+      setError("No hay diferencias para ajustar.");
+    }
+  }
+
   if (rol && rol !== "admin" && rol !== "taller_stock" && rol !== "encargado") return null;
 
   return (
@@ -226,19 +366,47 @@ export default function StockPage() {
             <p className="text-sm text-[#6B6558] mt-0.5">Todo el stock está en niveles saludables</p>
           ))}
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <button onClick={exportarExcel} className="flex items-center gap-1.5 bg-white border border-line text-ink px-4 py-2 rounded-sm text-sm font-medium hover:bg-[#F2EEE3] transition-colors">
             <Download size={16} /> Exportar a Excel
           </button>
           {!soloLectura && (
-            <button onClick={openNuevo} className="flex items-center gap-1.5 bg-ink text-paper px-4 py-2 rounded-sm text-sm font-medium hover:bg-[#333731] transition-colors">
-              <Plus size={16} /> Nuevo insumo
-            </button>
+            <>
+              <button onClick={() => setShowImport(true)} className="flex items-center gap-1.5 bg-white border border-line text-ink px-4 py-2 rounded-sm text-sm font-medium hover:bg-[#F2EEE3] transition-colors">
+                <Upload size={16} /> Importar Excel
+              </button>
+              <button onClick={abrirControl} className="flex items-center gap-1.5 bg-white border border-line text-ink px-4 py-2 rounded-sm text-sm font-medium hover:bg-[#F2EEE3] transition-colors">
+                <ClipboardCheck size={16} /> Control de stock
+              </button>
+              <button onClick={openNuevo} className="flex items-center gap-1.5 bg-ink text-paper px-4 py-2 rounded-sm text-sm font-medium hover:bg-[#333731] transition-colors">
+                <Plus size={16} /> Nuevo insumo
+              </button>
+            </>
           )}
         </div>
       </div>
 
       {error && <p className="text-sm text-red mb-4">Error: {error}</p>}
+
+      {esAdmin && (
+        <div className="flex gap-2 mb-4">
+          {["Principal", "Pañol", "Gral. Villegas"].map((d) => (
+            <button
+              key={d}
+              type="button"
+              onClick={() => setDepositoSel(d)}
+              className="px-3 py-2 rounded-sm text-sm font-medium border transition-colors"
+              style={{
+                backgroundColor: depositoSel === d ? "#1C1F1C" : "white",
+                color: depositoSel === d ? "white" : "#1C1F1C",
+                borderColor: "#D8D2C4",
+              }}
+            >
+              {d}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="flex items-center gap-3 mb-4 flex-wrap">
         <div className="flex items-center gap-2 bg-white border border-line rounded-sm px-3 py-2 w-full sm:max-w-xs">
@@ -395,6 +563,90 @@ export default function StockPage() {
             <div className="flex gap-2">
               <button onClick={() => setArchiving(null)} className="flex-1 py-2 rounded-sm text-sm font-medium border border-line hover:bg-[#F2EEE3]">Cancelar</button>
               <button onClick={confirmarArchivar} className="flex-1 py-2 rounded-sm text-sm font-medium bg-red text-white hover:opacity-90">Archivar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showImport && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-card w-full max-w-lg rounded-sm border border-line shadow-2xl my-4">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-line">
+              <h3 className="font-display text-xl font-semibold flex items-center gap-2"><Upload size={18} /> Importar cajas desde Excel</h3>
+              <button onClick={() => { setShowImport(false); setImportPreview(null); }}><X size={18} /></button>
+            </div>
+            <div className="p-5">
+              <p className="text-sm text-[#6B6558] mb-3">Subí una planilla con las columnas <b>Nombre, Categoría, Unidad, Stock, Stock mínimo, Depósito</b>. Si la caja ya existe (mismo nombre y depósito) se actualiza.</p>
+              <div className="flex gap-2 mb-4">
+                <button onClick={descargarPlantillaCajas} className="inline-flex items-center gap-1.5 bg-white border border-line text-ink px-3 py-2 rounded-sm text-sm font-medium hover:bg-[#F2EEE3]">
+                  <FileSpreadsheet size={15} /> Descargar plantilla
+                </button>
+                <label className="inline-flex items-center gap-1.5 bg-ink text-paper px-3 py-2 rounded-sm text-sm font-medium hover:bg-[#333731] cursor-pointer">
+                  <Upload size={15} /> Elegir archivo
+                  <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleImportFile} />
+                </label>
+              </div>
+              {importPreview && (
+                <div className="border border-line rounded-sm p-3 bg-[#F7F4EC] mb-3">
+                  <p className="text-sm font-medium">{importPreview.filas.length} fila{importPreview.filas.length !== 1 ? "s" : ""} lista{importPreview.filas.length !== 1 ? "s" : ""} para importar</p>
+                  {importPreview.errores.length > 0 && (
+                    <ul className="text-xs text-red mt-1 list-disc pl-4">
+                      {importPreview.errores.map((e, i) => <li key={i}>{e}</li>)}
+                    </ul>
+                  )}
+                  <div className="max-h-40 overflow-y-auto mt-2 text-xs">
+                    <table className="w-full">
+                      <thead><tr className="text-[#6B6558]"><th className="text-left">Nombre</th><th>Stock</th><th>Depósito</th></tr></thead>
+                      <tbody>
+                        {importPreview.filas.slice(0, 20).map((f, i) => (
+                          <tr key={i}><td className="pr-2 truncate max-w-[180px]">{f.nombre}</td><td className="text-center">{f.stock}</td><td className="text-center">{f.deposito}</td></tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {importPreview.filas.length > 20 && <p className="text-[#8A8578] mt-1">... y {importPreview.filas.length - 20} más</p>}
+                  </div>
+                </div>
+              )}
+              <button onClick={confirmarImport} disabled={!importPreview || importPreview.filas.length === 0 || importando} className="w-full bg-ink text-paper py-2.5 rounded-sm text-sm font-medium hover:bg-[#333731] disabled:opacity-60">
+                {importando ? "Importando..." : `Confirmar importación (${importPreview?.filas.length || 0})`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showControl && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-card w-full max-w-lg rounded-sm border border-line shadow-2xl my-4 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-line shrink-0">
+              <h3 className="font-display text-xl font-semibold flex items-center gap-2"><ClipboardCheck size={18} /> Control de stock — {depositoSel}</h3>
+              <button onClick={() => setShowControl(false)}><X size={18} /></button>
+            </div>
+            <div className="p-5 overflow-y-auto flex-1">
+              <p className="text-sm text-[#6B6558] mb-3">Contá el stock real en el depósito y cargá la cantidad contada. Al confirmar, las diferencias se ajustan y quedan registradas como <b>Ajuste</b> en Movimientos.</p>
+              <div className="space-y-2">
+                {filtered.filter((i) => i.activo !== false).map((i) => {
+                  const contado = conteos[i.id];
+                  const num = Number(contado);
+                  const dif = !isNaN(num) && contado !== "" ? num - Number(i.stock) : 0;
+                  const hayDif = contado !== "" && dif !== 0;
+                  return (
+                    <div key={i.id} className="flex items-center gap-2 border border-[#EFEBE0] rounded-sm px-3 py-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate">{i.nombre}</div>
+                        <div className="text-xs text-[#8A8578]">Sistema: {i.stock} {i.unidad}{hayDif && <span className={dif > 0 ? "text-[#4B7355]" : "text-[#C7522A]"}> → {dif > 0 ? `+${dif}` : dif}</span>}</div>
+                      </div>
+                      <input type="number" className={inputCls + " w-24 shrink-0 text-center"} value={contado} onChange={(e) => setConteos((prev) => ({ ...prev, [i.id]: e.target.value }))} placeholder={String(i.stock)} />
+                    </div>
+                  );
+                })}
+                {filtered.filter((i) => i.activo !== false).length === 0 && <p className="text-sm text-[#8A8578]">No hay insumos en este depósito para controlar.</p>}
+              </div>
+            </div>
+            <div className="p-5 border-t border-line shrink-0">
+              <button onClick={guardarControl} disabled={controlGuardando} className="w-full bg-ink text-paper py-2.5 rounded-sm text-sm font-medium hover:bg-[#333731] disabled:opacity-60">
+                {controlGuardando ? "Guardando..." : "Confirmar control y ajustar diferencias"}
+              </button>
             </div>
           </div>
         </div>
