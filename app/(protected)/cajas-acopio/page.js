@@ -60,6 +60,9 @@ export default function StockPage() {
   const [controlGuardando, setControlGuardando] = useState(false);
   const [herramientasPorCaja, setHerramientasPorCaja] = useState({});
   const [nuevoTool, setNuevoTool] = useState({});
+  const [showControlHerr, setShowControlHerr] = useState(false);
+  const [conteosHerr, setConteosHerr] = useState({});
+  const [controlHerrGuardando, setControlHerrGuardando] = useState(false);
 
   async function loadInsumos() {
     setLoading(true);
@@ -251,6 +254,52 @@ export default function StockPage() {
     cargarHerramientas();
   }
 
+  function abrirControlHerr() {
+    const m = {};
+    Object.values(herramientasPorCaja).flat().forEach((h) => { m[h.id] = String(h.cantidad); });
+    setConteosHerr(m);
+    setShowControlHerr(true);
+  }
+
+  async function guardarControlHerr() {
+    setControlHerrGuardando(true);
+    setError(null);
+    let ok = 0;
+    const errores = [];
+    for (const cajaId of Object.keys(herramientasPorCaja)) {
+      for (const h of herramientasPorCaja[cajaId] || []) {
+        const contadoStr = conteosHerr[h.id];
+        if (contadoStr === "" || contadoStr == null) continue;
+        const contado = Number(contadoStr);
+        if (Number.isNaN(contado) || contado < 0) { errores.push(`${h.herramienta}: valor inválido`); continue; }
+        const sistema = Number(h.cantidad);
+        if (contado === sistema) continue;
+        const dif = contado - sistema;
+        const { error: errUpd } = await supabase.from("caja_herramientas").update({ cantidad: contado }).eq("id", h.id);
+        if (errUpd) { errores.push(`${h.herramienta}: ${errUpd.message}`); continue; }
+        const { error: errLog } = await supabase.from("caja_control_log").insert({
+          caja_id: Number(cajaId),
+          herramienta_id: h.id,
+          herramienta: h.herramienta,
+          cantidad_sistema: sistema,
+          cantidad_contada: contado,
+          diferencia: dif,
+          usuario_email: session?.user?.email || null,
+        });
+        if (errLog) errores.push(`${h.herramienta} (log): ${errLog.message}`);
+        else ok++;
+      }
+    }
+    setControlHerrGuardando(false);
+    if (errores.length > 0) setError(errores.join(" | "));
+    if (ok > 0) {
+      setShowControlHerr(false);
+      cargarHerramientas();
+    } else if (errores.length === 0) {
+      setError("No hay diferencias para ajustar.");
+    }
+  }
+
   async function descargarPlantillaCajas() {
     const XLSX = await import("xlsx");
     const filas = [
@@ -396,6 +445,9 @@ export default function StockPage() {
         <div className="flex gap-2 flex-wrap">
           <button onClick={exportarExcel} className="flex items-center gap-1.5 bg-white border border-line text-ink px-4 py-2 rounded-sm text-sm font-medium hover:bg-[#F2EEE3] transition-colors">
             <Download size={16} /> Exportar a Excel
+          </button>
+          <button onClick={abrirControlHerr} className="flex items-center gap-1.5 bg-white border border-line text-ink px-4 py-2 rounded-sm text-sm font-medium hover:bg-[#F2EEE3] transition-colors">
+            <Wrench size={16} /> Control de herramientas
           </button>
           {!soloLectura && (
             <>
@@ -720,6 +772,49 @@ export default function StockPage() {
             <div className="p-5 border-t border-line shrink-0">
               <button onClick={guardarControl} disabled={controlGuardando} className="w-full bg-ink text-paper py-2.5 rounded-sm text-sm font-medium hover:bg-[#333731] disabled:opacity-60">
                 {controlGuardando ? "Guardando..." : "Confirmar control y ajustar diferencias"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showControlHerr && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-card w-full max-w-2xl rounded-sm border border-line shadow-2xl my-4 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-line shrink-0">
+              <h3 className="font-display text-xl font-semibold flex items-center gap-2"><Wrench size={18} /> Control de herramientas — Gral. Villegas</h3>
+              <button onClick={() => setShowControlHerr(false)}><X size={18} /></button>
+            </div>
+            <div className="p-5 overflow-y-auto flex-1">
+              <p className="text-sm text-[#6B6558] mb-3">Contá herramienta por herramienta en cada caja. Al confirmar, las diferencias se ajustan y quedan registradas.</p>
+              {filtered.filter((i) => i.activo !== false).map((caja) => (
+                <div key={caja.id} className="mb-5">
+                  <h4 className="font-medium text-sm mb-2">{caja.nombre}</h4>
+                  <div className="space-y-2">
+                    {(herramientasPorCaja[caja.id] || []).map((h) => {
+                      const contado = conteosHerr[h.id];
+                      const num = Number(contado);
+                      const dif = !isNaN(num) && contado !== "" ? num - Number(h.cantidad) : 0;
+                      const hayDif = contado !== "" && dif !== 0;
+                      return (
+                        <div key={h.id} className="flex items-center gap-2 border border-[#EFEBE0] rounded-sm px-3 py-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm truncate">{h.herramienta} <span className="text-[#8A8578]">· {h.unidad}</span></div>
+                            <div className="text-xs text-[#8A8578]">Sistema: {h.cantidad}{hayDif && <span className={dif > 0 ? "text-[#4B7355]" : "text-[#C7522A]"}> → {dif > 0 ? `+${dif}` : dif}</span>}</div>
+                          </div>
+                          <input type="number" className={inputCls + " w-20 shrink-0 text-center"} value={contado ?? ""} onChange={(e) => setConteosHerr((prev) => ({ ...prev, [h.id]: e.target.value }))} placeholder={String(h.cantidad)} />
+                        </div>
+                      );
+                    })}
+                    {(herramientasPorCaja[caja.id] || []).length === 0 && <p className="text-xs text-[#8A8578]">Esta caja no tiene herramientas cargadas.</p>}
+                  </div>
+                </div>
+              ))}
+              {filtered.filter((i) => i.activo !== false).length === 0 && <p className="text-sm text-[#8A8578]">No hay cajas para controlar.</p>}
+            </div>
+            <div className="p-5 border-t border-line shrink-0">
+              <button onClick={guardarControlHerr} disabled={controlHerrGuardando} className="w-full bg-ink text-paper py-2.5 rounded-sm text-sm font-medium hover:bg-[#333731] disabled:opacity-60">
+                {controlHerrGuardando ? "Guardando..." : "Confirmar control de herramientas"}
               </button>
             </div>
           </div>
