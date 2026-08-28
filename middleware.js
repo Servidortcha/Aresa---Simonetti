@@ -13,7 +13,8 @@ function requiredRoles(pathname) {
   if (/^\/organigrama(\/|$)/.test(pathname)) return ["admin"];
   if (/^\/grua(\/|$)/.test(pathname)) return ["admin", "grua"];
   if (/^\/partes-diarios(\/|$)/.test(pathname)) return ["admin", "encargado"];
-  if (/^\/stock(\/|$)/.test(pathname)) return ["admin", "taller_stock", "encargado"];
+  if (/^\/stock(\/|$)/.test(pathname)) return ["admin", "taller_stock"];
+  if (/^\/cajas-acopio(\/|$)/.test(pathname)) return ["admin", "encargado"];
   if (/^\/trabajos(\/|$)/.test(pathname)) return ["admin", "taller_stock"];
   if (/^\/nesting(\/|$)/.test(pathname)) return ["admin", "taller_stock"];
   return null;

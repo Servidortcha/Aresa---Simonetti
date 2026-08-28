@@ -39,7 +39,7 @@ export default function StockPage() {
   const { rol, session } = useAuth();
   const router = useRouter();
   const esAdmin = rol === "admin";
-  const soloLectura = rol === "taller_stock";
+  const soloLectura = rol === "encargado";
   const [insumos, setInsumos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -52,7 +52,6 @@ export default function StockPage() {
   const [enviando, setEnviando] = useState(false);
   const [archiving, setArchiving] = useState(null);
   const [verArchivados, setVerArchivados] = useState(false);
-  const [depositoSel, setDepositoSel] = useState("Principal");
   const [showImport, setShowImport] = useState(false);
   const [importPreview, setImportPreview] = useState(null);
   const [importando, setImportando] = useState(false);
@@ -62,7 +61,7 @@ export default function StockPage() {
 
   async function loadInsumos() {
     setLoading(true);
-    const { data, error } = await supabase.from("insumos").select("*").eq("deposito", depositoSel).order("nombre");
+    const { data, error } = await supabase.from("insumos").select("*").eq("deposito", "Gral. Villegas").order("nombre");
     if (error) setError(error.message);
     else setInsumos(data);
     setLoading(false);
@@ -71,10 +70,10 @@ export default function StockPage() {
   useEffect(() => {
     if (!rol) return;
     loadInsumos();
-  }, [rol, depositoSel]);
+  }, [rol]);
 
   useEffect(() => {
-    if (rol && rol !== "admin" && rol !== "taller_stock") router.replace("/ingreso-egreso");
+    if (rol && rol !== "admin" && rol !== "encargado") router.replace("/ingreso-egreso");
   }, [rol, router]);
 
   const categorias = useMemo(() => ["Todas", ...new Set(insumos.map((i) => i.categoria).filter(Boolean))], [insumos]);
@@ -104,7 +103,7 @@ export default function StockPage() {
     const hoja = XLSX.utils.json_to_sheet(filas);
     const libro = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(libro, hoja, "Stock");
-    XLSX.writeFile(libro, `stock-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    XLSX.writeFile(libro, `cajas-acopio-${new Date().toISOString().slice(0, 10)}.xlsx`);
   }
 
   function openNuevo() {
@@ -140,7 +139,7 @@ export default function StockPage() {
       unidad: form.unidad,
       stock: Number(form.stock) || 0,
       minimo: Number(form.minimo) || 0,
-      deposito: depositoSel,
+      deposito: "Gral. Villegas",
     };
 
     let error;
@@ -348,13 +347,13 @@ export default function StockPage() {
     }
   }
 
-  if (rol && rol !== "admin" && rol !== "taller_stock") return null;
+  if (rol && rol !== "admin" && rol !== "encargado") return null;
 
   return (
     <>
       <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
         <div>
-          <h1 className="font-display text-3xl font-semibold">Insumos</h1>
+          <h1 className="font-display text-3xl font-semibold">Cajas de Acopio — Gral. Villegas</h1>
           {!loading && (lowCount > 0 ? (
             <p className="text-sm text-red flex items-center gap-1 mt-0.5"><AlertTriangle size={14} /> {lowCount} insumo{lowCount > 1 ? "s" : ""} por debajo del mínimo</p>
           ) : (
@@ -382,26 +381,6 @@ export default function StockPage() {
       </div>
 
       {error && <p className="text-sm text-red mb-4">Error: {error}</p>}
-
-      {esAdmin && (
-        <div className="flex gap-2 mb-4">
-          {["Principal", "Pañol"].map((d) => (
-            <button
-              key={d}
-              type="button"
-              onClick={() => setDepositoSel(d)}
-              className="px-3 py-2 rounded-sm text-sm font-medium border transition-colors"
-              style={{
-                backgroundColor: depositoSel === d ? "#1C1F1C" : "white",
-                color: depositoSel === d ? "white" : "#1C1F1C",
-                borderColor: "#D8D2C4",
-              }}
-            >
-              {d}
-            </button>
-          ))}
-        </div>
-      )}
 
       <div className="flex items-center gap-3 mb-4 flex-wrap">
         <div className="flex items-center gap-2 bg-white border border-line rounded-sm px-3 py-2 w-full sm:max-w-xs">
@@ -614,7 +593,7 @@ export default function StockPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
           <div className="bg-card w-full max-w-lg rounded-sm border border-line shadow-2xl my-4 max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between px-5 py-4 border-b border-line shrink-0">
-              <h3 className="font-display text-xl font-semibold flex items-center gap-2"><ClipboardCheck size={18} /> Control de stock — {depositoSel}</h3>
+              <h3 className="font-display text-xl font-semibold flex items-center gap-2"><ClipboardCheck size={18} /> Control de stock — Gral. Villegas</h3>
               <button onClick={() => setShowControl(false)}><X size={18} /></button>
             </div>
             <div className="p-5 overflow-y-auto flex-1">

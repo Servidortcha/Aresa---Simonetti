@@ -15,9 +15,15 @@ const GROUPS = [
     label: "Movimiento",
     items: [
       { href: "/ingreso-egreso", label: "Ingreso / Egreso", roles: ["admin", "taller_stock", "operario"] },
-      { href: "/stock", label: "Stock", roles: ["admin", "taller_stock", "encargado"] },
+      { href: "/stock", label: "Stock", roles: ["admin", "taller_stock"] },
       { href: "/movimientos", label: "Movimientos", roles: ["admin"] },
       { href: "/stock-panol", label: "Stock Pañol", roles: ["admin"] },
+    ],
+  },
+  {
+    label: "Acopio",
+    items: [
+      { href: "/cajas-acopio", label: "Cajas de Acopio", roles: ["admin", "encargado"] },
     ],
   },
   {
