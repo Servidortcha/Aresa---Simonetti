@@ -766,7 +766,7 @@ export default function StockPage() {
 
       {showControl && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-card w-full max-w-lg rounded-sm border border-line shadow-2xl my-4 max-h-[90vh] flex flex-col">
+          <div className="bg-card w-full max-w-2xl rounded-sm border border-line shadow-2xl my-4 max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between px-5 py-4 border-b border-line shrink-0">
               <h3 className="font-display text-xl font-semibold flex items-center gap-2"><ClipboardCheck size={18} /> Control de stock — Gral. Villegas</h3>
               <button onClick={() => setShowControl(false)}><X size={18} /></button>
@@ -780,12 +780,12 @@ export default function StockPage() {
                   const dif = !isNaN(num) && contado !== "" ? num - Number(i.stock) : 0;
                   const hayDif = contado !== "" && dif !== 0;
                   return (
-                    <div key={i.id} className="flex items-center gap-2 border border-[#EFEBE0] rounded-sm px-3 py-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium truncate">{i.nombre}</div>
-                        <div className="text-xs text-[#8A8578]">Sistema: {i.stock} {i.unidad}{hayDif && <span className={dif > 0 ? "text-[#4B7355]" : "text-[#C7522A]"}> → {dif > 0 ? `+${dif}` : dif}</span>}</div>
+                    <div key={i.id} className="grid grid-cols-[1fr_96px] gap-3 items-center border border-[#EFEBE0] rounded-sm px-3 py-2">
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium truncate leading-tight">{i.nombre}</div>
+                        <div className="text-xs text-[#8A8578] leading-tight">Sistema: <span className="font-mono">{i.stock} {i.unidad}</span>{hayDif && <span className={dif > 0 ? "text-[#4B7355]" : "text-[#C7522A]"}> → {dif > 0 ? `+${dif}` : dif}</span>}</div>
                       </div>
-                      <input type="number" className={inputCls + " w-24 shrink-0 text-center"} value={contado} onChange={(e) => setConteos((prev) => ({ ...prev, [i.id]: e.target.value }))} placeholder={String(i.stock)} />
+                      <input type="number" className={inputCls + " w-full text-center"} value={contado} onChange={(e) => setConteos((prev) => ({ ...prev, [i.id]: e.target.value }))} placeholder={String(i.stock)} />
                     </div>
                   );
                 })}
@@ -820,12 +820,12 @@ export default function StockPage() {
                       const dif = !isNaN(num) && contado !== "" ? num - Number(h.cantidad) : 0;
                       const hayDif = contado !== "" && dif !== 0;
                       return (
-                        <div key={h.id} className="flex items-center gap-2 border border-[#EFEBE0] rounded-sm px-3 py-2">
-                          <div className="flex-1 min-w-0">
-                            <div className="text-sm truncate">{h.herramienta} <span className="text-[#8A8578]">· {h.unidad}</span></div>
-                            <div className="text-xs text-[#8A8578]">Sistema: {h.cantidad}{hayDif && <span className={dif > 0 ? "text-[#4B7355]" : "text-[#C7522A]"}> → {dif > 0 ? `+${dif}` : dif}</span>}</div>
+                        <div key={h.id} className="grid grid-cols-[1fr_80px] gap-3 items-center border border-[#EFEBE0] rounded-sm px-3 py-2">
+                          <div className="min-w-0">
+                            <div className="text-sm truncate leading-tight">{h.herramienta} <span className="text-[#8A8578]">· {h.unidad}</span></div>
+                            <div className="text-xs text-[#8A8578] leading-tight">Sistema: <span className="font-mono">{h.cantidad}</span>{hayDif && <span className={dif > 0 ? "text-[#4B7355]" : "text-[#C7522A]"}> → {dif > 0 ? `+${dif}` : dif}</span>}</div>
                           </div>
-                          <input type="number" className={inputCls + " w-20 shrink-0 text-center"} value={contado ?? ""} onChange={(e) => setConteosHerr((prev) => ({ ...prev, [h.id]: e.target.value }))} placeholder={String(h.cantidad)} />
+                          <input type="number" className={inputCls + " w-full text-center"} value={contado ?? ""} onChange={(e) => setConteosHerr((prev) => ({ ...prev, [h.id]: e.target.value }))} placeholder={String(h.cantidad)} />
                         </div>
                       );
                     })}
