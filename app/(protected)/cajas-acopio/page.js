@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
 import { useAuth } from "../../../lib/AuthContext";
-import { AlertTriangle, Search, Plus, X, Pencil, Trash2, Download, Upload, ClipboardCheck, FileSpreadsheet, Wrench } from "lucide-react";
+import { AlertTriangle, Search, Plus, X, Pencil, Trash2, Download, Upload, ClipboardCheck, FileSpreadsheet, Wrench, Printer } from "lucide-react";
 
 const CATS = ["Químicos", "Empaques", "Metales", "Textiles", "Seguridad", "Insumos para Fabricación", "Herramientas"];
 const UNITS = ["kg", "L", "unid", "m"];
@@ -63,6 +63,7 @@ export default function StockPage() {
   const [showControlHerr, setShowControlHerr] = useState(false);
   const [conteosHerr, setConteosHerr] = useState({});
   const [controlHerrGuardando, setControlHerrGuardando] = useState(false);
+  const [cajaParaImprimir, setCajaParaImprimir] = useState(null);
 
   async function loadInsumos() {
     setLoading(true);
@@ -300,6 +301,19 @@ export default function StockPage() {
     }
   }
 
+  function imprimirCaja(caja) {
+    setCajaParaImprimir(caja);
+    const tituloOriginal = document.title;
+    const nombre = caja.nombre.replace(/[^a-zA-Z0-9 _-]/g, "").trim().replace(/\s+/g, "-");
+    document.title = `Caja-${nombre}`;
+    function restaurar() {
+      document.title = tituloOriginal;
+      window.removeEventListener("afterprint", restaurar);
+    }
+    window.addEventListener("afterprint", restaurar);
+    setTimeout(() => window.print(), 100);
+  }
+
   async function descargarPlantillaCajas() {
     const XLSX = await import("xlsx");
     const filas = [
@@ -499,20 +513,25 @@ export default function StockPage() {
                   <div className="font-medium leading-snug">{i.nombre}</div>
                   <div className="text-xs text-[#6B6558] mt-0.5">{i.categoria}</div>
                 </div>
-                {!soloLectura && (
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button onClick={() => openEditar(i)} className="p-2.5 border border-line rounded-sm text-[#4A4B4D]" title="Editar" aria-label={`Editar ${i.nombre}`}>
-                      <Pencil size={16} />
-                    </button>
-                    {verArchivados ? (
-                      <button onClick={() => reactivar(i)} className="px-3 py-2.5 border border-line rounded-sm text-green text-xs font-medium">Reactivar</button>
-                    ) : (
-                      <button onClick={() => setArchiving(i)} className="p-2.5 border border-line rounded-sm text-red" title="Archivar" aria-label={`Archivar ${i.nombre}`}>
-                        <Trash2 size={16} />
+                <div className="flex items-center gap-2 shrink-0">
+                  <button onClick={() => imprimirCaja(i)} className="p-2.5 border border-line rounded-sm text-[#4A4B4D]" title="Imprimir" aria-label={`Imprimir ${i.nombre}`}>
+                    <Printer size={16} />
+                  </button>
+                  {!soloLectura && (
+                    <>
+                      <button onClick={() => openEditar(i)} className="p-2.5 border border-line rounded-sm text-[#4A4B4D]" title="Editar" aria-label={`Editar ${i.nombre}`}>
+                        <Pencil size={16} />
                       </button>
-                    )}
-                  </div>
-                )}
+                      {verArchivados ? (
+                        <button onClick={() => reactivar(i)} className="px-3 py-2.5 border border-line rounded-sm text-green text-xs font-medium">Reactivar</button>
+                      ) : (
+                        <button onClick={() => setArchiving(i)} className="p-2.5 border border-line rounded-sm text-red" title="Archivar" aria-label={`Archivar ${i.nombre}`}>
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
               <div className="flex items-center justify-between mt-3 gap-3">
                 <div className="font-mono text-base">
@@ -564,11 +583,12 @@ export default function StockPage() {
               <th className="px-4 py-3 font-medium">Categoría</th>
               <th className="px-4 py-3 font-medium">Stock / Mínimo</th>
               <th className="px-4 py-3 font-medium">Nivel</th>
+              <th className="px-4 py-3 font-medium text-right">Imprimir</th>
               {!soloLectura && <th className="px-4 py-3 font-medium text-right">Acciones</th>}
             </tr>
           </thead>
           <tbody>
-            {loading && <tr><td colSpan={soloLectura ? 4 : 5} className="px-4 py-8 text-center text-sm text-[#8A8578]">Cargando...</td></tr>}
+            {loading && <tr><td colSpan={soloLectura ? 5 : 6} className="px-4 py-8 text-center text-sm text-[#8A8578]">Cargando...</td></tr>}
             {!loading && filtered.map((i, idx) => (
               <React.Fragment key={i.id}>
                 <tr className={`${idx % 2 === 1 ? "bg-[#F7F4EC]" : ""} border-b border-[#EFEBE0]`}>
@@ -580,6 +600,9 @@ export default function StockPage() {
                     {i.stock} <span className="text-[#B0AA9A]">/ {i.minimo}</span> <span className="text-[#8A8578] text-xs">{i.unidad}</span>
                   </td>
                   <td className="px-4 py-3"><StockGauge stock={i.stock} minimo={i.minimo} /></td>
+                  <td className="px-4 py-3 text-right">
+                    <button onClick={() => imprimirCaja(i)} className="text-[#4A4B4D] hover:opacity-70" title="Imprimir"><Printer size={15} /></button>
+                  </td>
                   {!soloLectura && (
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-3">
@@ -598,7 +621,7 @@ export default function StockPage() {
                   )}
                 </tr>
                 <tr className={`${idx % 2 === 1 ? "bg-[#F7F4EC]" : ""} ${idx !== filtered.length - 1 ? "border-b border-[#EFEBE0]" : ""}`}>
-                  <td colSpan={soloLectura ? 4 : 5} className="px-4 py-3 bg-[#FDFBF5]">
+                  <td colSpan={soloLectura ? 5 : 6} className="px-4 py-3 bg-[#FDFBF5]">
                     <div className="flex items-center gap-1.5 mb-1.5">
                       <Wrench size={13} className="text-[#8A8578]" />
                       <span className="text-[10px] uppercase tracking-wide text-[#8A8578]">Herramientas en esta caja ({(herramientasPorCaja[i.id] || []).length})</span>
@@ -635,7 +658,7 @@ export default function StockPage() {
               </React.Fragment>
             ))}
             {!loading && filtered.length === 0 && (
-              <tr><td colSpan={soloLectura ? 4 : 5} className="px-4 py-8 text-center text-sm text-[#8A8578]">Sin resultados</td></tr>
+              <tr><td colSpan={soloLectura ? 5 : 6} className="px-4 py-8 text-center text-sm text-[#8A8578]">Sin resultados</td></tr>
             )}
           </tbody>
         </table>
@@ -818,6 +841,39 @@ export default function StockPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {cajaParaImprimir && (
+        <div className="print-card hidden">
+          <div className="pc-header">
+            <div className="pc-empresa">Simonetti Montajes Industriales</div>
+            <div className="pc-tipo">Caja de Acopio — Gral. Villegas</div>
+          </div>
+          <table className="pc-tabla">
+            <tbody>
+              <tr><td className="pc-label">Caja</td><td>{cajaParaImprimir.nombre}</td></tr>
+              <tr><td className="pc-label">Categoría</td><td>{cajaParaImprimir.categoria || "—"}</td></tr>
+              <tr><td className="pc-label">Stock</td><td>{cajaParaImprimir.stock} {cajaParaImprimir.unidad} (mín. {cajaParaImprimir.minimo})</td></tr>
+              <tr><td className="pc-label">Depósito</td><td>{cajaParaImprimir.deposito}</td></tr>
+              <tr>
+                <td className="pc-label">Herramientas</td>
+                <td>
+                  {(herramientasPorCaja[cajaParaImprimir.id] || []).length > 0 ? (
+                    <table style={{ width: "100%", fontSize: "12px", borderCollapse: "collapse" }}>
+                      <thead><tr style={{ textAlign: "left", color: "#6B6558" }}><th style={{ padding: "4px 0" }}>Cant.</th><th>Herramienta</th></tr></thead>
+                      <tbody>
+                        {(herramientasPorCaja[cajaParaImprimir.id] || []).map((h) => (
+                          <tr key={h.id} style={{ borderTop: "1px solid #E4DFD3" }}><td style={{ padding: "4px 0" }}>{h.cantidad} {h.unidad}</td><td>{h.herramienta}</td></tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : "Sin herramientas cargadas"}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div className="pc-footer">Powered by Aresa</div>
         </div>
       )}
     </>
