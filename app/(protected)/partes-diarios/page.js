@@ -52,6 +52,7 @@ export default function PartesDiariosPage() {
   const [archivosSeleccionados, setArchivosSeleccionados] = useState([]);
   const [archivosActuales, setArchivosActuales] = useState([]);
   const [enviando, setEnviando] = useState(false);
+  const [progreso, setProgreso] = useState("");
   const [confirmarBorrar, setConfirmarBorrar] = useState(null);
   const [filtroFrente, setFiltroFrente] = useState("todos");
 
@@ -165,23 +166,35 @@ export default function PartesDiariosPage() {
     }
 
     setEnviando(true);
+    setProgreso(archivosSeleccionados.length > 0 ? `Preparando ${archivosSeleccionados.length} archivo(s)...` : "");
 
     const archivosSubidos = [...archivosActuales];
-    for (const file of archivosSeleccionados) {
-      const nombreSeguro = file.name
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .replace(/[^a-zA-Z0-9._-]/g, "_");
-      const path = `${frenteId}/${Date.now()}-${nombreSeguro}`;
-      const { error: uploadError } = await supabase.storage.from("partes-diarios").upload(path, file);
-      if (uploadError) {
-        setError("Error al subir " + file.name + ": " + uploadError.message);
-        setEnviando(false);
-        return;
+    try {
+      for (let idx = 0; idx < archivosSeleccionados.length; idx++) {
+        const file = archivosSeleccionados[idx];
+        if (file.size > 15 * 1024 * 1024) {
+          throw new Error(`${file.name} supera 15 MB. Achicalo o subí menos archivos a la vez.`);
+        }
+        setProgreso(`Subiendo ${idx + 1}/${archivosSeleccionados.length}: ${file.name}`);
+        const nombreSeguro = file.name
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .replace(/[^a-zA-Z0-9._-]/g, "_");
+        const path = `${frenteId}/${Date.now()}-${idx}-${nombreSeguro}`;
+        const { error: uploadError } = await supabase.storage.from("partes-diarios").upload(path, file, { cacheControl: "3600", upsert: false });
+        if (uploadError) {
+          throw new Error(`Error al subir ${file.name}: ${uploadError.message}`);
+        }
+        const { data: pub } = supabase.storage.from("partes-diarios").getPublicUrl(path);
+        archivosSubidos.push({ name: file.name, url: pub.publicUrl, type: file.type || "" });
       }
-      const { data: pub } = supabase.storage.from("partes-diarios").getPublicUrl(path);
-      archivosSubidos.push({ name: file.name, url: pub.publicUrl, type: file.type || "" });
+    } catch (err) {
+      setError(err.message || String(err));
+      setEnviando(false);
+      setProgreso("");
+      return;
     }
+    setProgreso("Guardando parte...");
 
     const payload = {
       frente_id: frenteId,
@@ -211,6 +224,7 @@ export default function PartesDiariosPage() {
     }
 
     setEnviando(false);
+    setProgreso("");
     if (error) {
       setError(error.message);
       return;
@@ -480,8 +494,9 @@ export default function PartesDiariosPage() {
                 )}
               </Field>
 
+              {enviando && progreso && <p className="text-xs text-[#6B6558] text-center mt-2">{progreso}</p>}
               <button type="submit" disabled={enviando} className="w-full mt-2 bg-ink text-paper py-2.5 rounded-sm text-sm font-medium hover:bg-[#333731] disabled:opacity-60">
-                {enviando ? "Guardando..." : editing ? "Guardar cambios" : "Guardar parte"}
+                {enviando ? (progreso || "Guardando...") : editing ? "Guardar cambios" : "Guardar parte"}
               </button>
             </form>
           </div>
