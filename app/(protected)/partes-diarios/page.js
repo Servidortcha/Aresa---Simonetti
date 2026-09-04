@@ -155,6 +155,29 @@ export default function PartesDiariosPage() {
     setShowForm(true);
   }
 
+  async function comprimirSiEsImagen(file) {
+    if (!file.type.startsWith("image/") || file.size < 600 * 1024) return file;
+    try {
+      const bitmap = await createImageBitmap(file);
+      const maxDim = 1920;
+      let { width, height } = bitmap;
+      if (width <= maxDim && height <= maxDim) return file;
+      const ratio = Math.min(maxDim / width, maxDim / height);
+      width = Math.round(width * ratio);
+      height = Math.round(height * ratio);
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(bitmap, 0, 0, width, height);
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, file.type, 0.72));
+      if (!blob || blob.size >= file.size) return file;
+      return new File([blob], file.name, { type: file.type, lastModified: Date.now() });
+    } catch {
+      return file;
+    }
+  }
+
   async function submit(e) {
     e.preventDefault();
     if (enviando) return;
@@ -168,12 +191,22 @@ export default function PartesDiariosPage() {
     setEnviando(true);
     setProgreso(archivosSeleccionados.length > 0 ? `Preparando ${archivosSeleccionados.length} archivo(s)...` : "");
 
+    if (archivosSeleccionados.length + archivosActuales.length > 30) {
+      setError("Máximo 30 archivos por parte. Quitá algunos e intentá de nuevo.");
+      setEnviando(false);
+      setProgreso("");
+      return;
+    }
     const archivosSubidos = [...archivosActuales];
     try {
       for (let idx = 0; idx < archivosSeleccionados.length; idx++) {
-        const file = archivosSeleccionados[idx];
+        let file = archivosSeleccionados[idx];
+        if (file.type.startsWith("image/") && file.size > 600 * 1024) {
+          setProgreso(`Comprimiendo ${idx + 1}/${archivosSeleccionados.length}: ${file.name}`);
+          file = await comprimirSiEsImagen(file);
+        }
         if (file.size > 15 * 1024 * 1024) {
-          throw new Error(`${file.name} supera 15 MB. Achicalo o subí menos archivos a la vez.`);
+          throw new Error(`${file.name} supera 15 MB incluso comprimida. Achicala o subí menos archivos.`);
         }
         setProgreso(`Subiendo ${idx + 1}/${archivosSeleccionados.length}: ${file.name}`);
         const nombreSeguro = file.name
