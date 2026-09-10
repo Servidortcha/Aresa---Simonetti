@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
 import { useAuth } from "../../../lib/AuthContext";
-import { ClipboardList, Plus, X, Pencil, Trash2, Paperclip, FileText } from "lucide-react";
+import { ClipboardList, Plus, X, Pencil, Trash2, Paperclip, FileText, Printer } from "lucide-react";
 
 const inputCls = "w-full px-3 py-2 bg-white border border-line rounded-sm text-sm text-ink focus:outline-none focus:ring-2 focus:ring-green focus:border-transparent";
 const textareaCls = inputCls + " resize-y min-h-[90px]";
@@ -55,6 +55,8 @@ export default function PartesDiariosPage() {
   const [progreso, setProgreso] = useState("");
   const [confirmarBorrar, setConfirmarBorrar] = useState(null);
   const [filtroFrente, setFiltroFrente] = useState("todos");
+  const [imprimirParte, setImprimirParte] = useState(null);
+  const [imprimirConImagenes, setImprimirConImagenes] = useState(true);
 
   useEffect(() => {
     if (rol && rol !== "admin" && rol !== "encargado") router.replace("/ingreso-egreso");
@@ -284,6 +286,19 @@ export default function PartesDiariosPage() {
     return esAdmin || parte.usuario_email === session?.user?.email;
   }
 
+  function imprimir(parte) {
+    setImprimirParte(parte);
+    setImprimirConImagenes(true);
+    const tituloOriginal = document.title;
+    document.title = `Parte-${parte.fecha}-${(nombreFrente[parte.frente_id] || "frente").replace(/\s+/g, "-")}`;
+    function restaurar() {
+      document.title = tituloOriginal;
+      window.removeEventListener("afterprint", restaurar);
+    }
+    window.addEventListener("afterprint", restaurar);
+    setTimeout(() => window.print(), 100);
+  }
+
   return (
     <>
       <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
@@ -331,16 +346,21 @@ export default function PartesDiariosPage() {
                   </span>
                   <span className="font-mono text-xs text-[#6B6558]">{formatFecha(p.fecha)}</span>
                 </div>
-                {puedeEditar(p) && (
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button onClick={() => abrirEditar(p)} className="p-2 border border-line rounded-sm text-[#4A4B4D]" title="Editar parte">
-                      <Pencil size={14} />
-                    </button>
-                    <button onClick={() => setConfirmarBorrar(p)} className="p-2 border border-line rounded-sm text-red" title="Eliminar parte">
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                )}
+                <div className="flex items-center gap-2 shrink-0">
+                  <button onClick={() => imprimir(p)} className="p-2 border border-line rounded-sm text-[#4A4B4D]" title="Imprimir parte">
+                    <Printer size={14} />
+                  </button>
+                  {puedeEditar(p) && (
+                    <>
+                      <button onClick={() => abrirEditar(p)} className="p-2 border border-line rounded-sm text-[#4A4B4D]" title="Editar parte">
+                        <Pencil size={14} />
+                      </button>
+                      <button onClick={() => setConfirmarBorrar(p)} className="p-2 border border-line rounded-sm text-red" title="Eliminar parte">
+                        <Trash2 size={14} />
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
 
               {(p.numero_parte_bunge || (p.horas_por_persona && p.horas_por_persona.length > 0)) && (
@@ -381,9 +401,10 @@ export default function PartesDiariosPage() {
                 <div className="flex flex-wrap items-center gap-2 mb-2">
                   {p.archivos.map((a, i) =>
                     a.type?.startsWith("image/") ? (
-                      <a key={i} href={a.url} target="_blank" rel="noopener noreferrer" title={a.name}>
+                      <a key={i} href={a.url} target="_blank" rel="noopener noreferrer" title={a.name} className="block">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={a.url} alt={a.name} className="h-20 w-20 object-cover rounded-sm border border-line" />
+                        <img src={a.url} alt={a.name} loading="lazy" className="h-20 w-20 object-cover rounded-sm border border-line bg-[#F7F4EC]" onError={(e) => { const t = e.currentTarget; t.style.display = 'none'; const f = t.nextElementSibling; if (f) f.style.display = 'flex'; }} />
+                        <span style={{display: 'none'}} className="h-20 w-20 items-center justify-center rounded-sm border border-line bg-[#F7F4EC] text-[10px] text-[#8A8578] text-center p-1 leading-tight">{a.name}</span>
                       </a>
                     ) : (
                       <a key={i} href={a.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-[#3B5166] hover:underline">
@@ -553,6 +574,62 @@ export default function PartesDiariosPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {imprimirParte && (
+        <div className="print-card hidden">
+          <style>{`@media print { .pc-no-print { display: none !important; } }`}</style>
+          <div className="pc-header">
+            <div className="pc-empresa">Simonetti Montajes Industriales</div>
+            <div className="pc-tipo">Parte diario — {nombreFrente[imprimirParte.frente_id] || "Frente"}</div>
+          </div>
+          <div className="pc-no-print" style={{marginBottom: '12px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap'}}>
+            <label style={{display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', cursor: 'pointer'}}>
+              <input type="checkbox" checked={imprimirConImagenes} onChange={(e) => setImprimirConImagenes(e.target.checked)} />
+              Incluir imágenes
+            </label>
+            <div style={{marginLeft: 'auto', display: 'flex', gap: '8px'}}>
+              <button onClick={() => window.print()} style={{padding: '6px 12px', background: '#1C1F1C', color: 'white', borderRadius: '4px', fontSize: '12px', border: 'none', cursor: 'pointer'}}>Imprimir</button>
+              <button onClick={() => setImprimirParte(null)} style={{padding: '6px 12px', border: '1px solid #D8D2C4', borderRadius: '4px', fontSize: '12px', background: 'white', cursor: 'pointer'}}>Cerrar</button>
+            </div>
+          </div>
+          <table className="pc-tabla">
+            <tbody>
+              <tr><td className="pc-label">Frente</td><td>{nombreFrente[imprimirParte.frente_id] || "—"}</td></tr>
+              <tr><td className="pc-label">Fecha</td><td>{formatFecha(imprimirParte.fecha)}</td></tr>
+              {imprimirParte.numero_parte_bunge && <tr><td className="pc-label">N° Bunge</td><td>{imprimirParte.numero_parte_bunge}</td></tr>}
+              <tr><td className="pc-label">Tareas</td><td style={{whiteSpace: 'pre-wrap'}}>{imprimirParte.tareas || "—"}</td></tr>
+              {imprimirParte.novedades && <tr><td className="pc-label">Novedades</td><td style={{whiteSpace: 'pre-wrap'}}>{imprimirParte.novedades}</td></tr>}
+              {imprimirParte.horas_por_persona && imprimirParte.horas_por_persona.length > 0 && (
+                <tr><td className="pc-label">Horas</td><td>
+                  {imprimirParte.horas_por_persona.map((h, i) => (
+                    <div key={i} style={{display: 'flex', justifyContent: 'space-between', fontSize: '12px', borderBottom: i < imprimirParte.horas_por_persona.length -1 ? '1px solid #E4DFD3' : 'none', padding: '2px 0'}}>
+                      <span>{h.nombre}</span><span>{h.horas} h</span>
+                    </div>
+                  ))}
+                </td></tr>
+              )}
+              {imprimirConImagenes && imprimirParte.archivos && imprimirParte.archivos.length > 0 && (
+                <tr><td className="pc-label">Imágenes</td><td>
+                  <div style={{display: 'flex', flexWrap: 'wrap', gap: '8px'}}>
+                    {imprimirParte.archivos.filter(a => a.type?.startsWith("image/")).map((a, i) => (
+                      <img key={i} src={a.url} alt={a.name} style={{width: '110px', height: '80px', objectFit: 'cover', border: '1px solid #E4DFD3', borderRadius: '4px'}} />
+                    ))}
+                  </div>
+                  {imprimirParte.archivos.filter(a => !a.type?.startsWith("image/")).length > 0 && (
+                    <div style={{marginTop: '8px', fontSize: '12px'}}>
+                      {imprimirParte.archivos.filter(a => !a.type?.startsWith("image/")).map((a, i) => (
+                        <div key={i}>{a.name}</div>
+                      ))}
+                    </div>
+                  )}
+                </td></tr>
+              )}
+              <tr><td className="pc-label">Registrado por</td><td>{imprimirParte.usuario_email || "—"}</td></tr>
+            </tbody>
+          </table>
+          <div className="pc-footer">Powered by Aresa</div>
         </div>
       )}
     </>
