@@ -40,6 +40,44 @@ function calcularM2(largo, ancho, cantidad) {
   return (l * a * c) / 1_000_000;
 }
 
+function numV(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function areaDeArchivo(a, gLargo, gAncho) {
+  const q = numV(a?.cantidad);
+  if (!q) return 0;
+  const l = numV(a?.largo_mm) || numV(gLargo);
+  const w = numV(a?.ancho_mm) || numV(gAncho);
+  if (!l || !w) return 0;
+  return (l * w * q) / 1_000_000;
+}
+
+function normalizarArchivo(a) {
+  if (!a) return null;
+  return {
+    name: a.name || "archivo.dxf",
+    url: a.url || "",
+    cantidad: a.cantidad != null && a.cantidad !== "" ? String(a.cantidad) : "",
+    largo_mm: a.largo_mm != null && a.largo_mm !== "" ? String(a.largo_mm) : "",
+    ancho_mm: a.ancho_mm != null && a.ancho_mm !== "" ? String(a.ancho_mm) : "",
+  };
+}
+
+function detalleCortes(t) {
+  const arr = archivosDe(t);
+  return arr
+    .map((a) => {
+      const q = numV(a?.cantidad);
+      const l = numV(a?.largo_mm);
+      const w = numV(a?.ancho_mm);
+      const area = q && l && w ? (l * w * q) / 1_000_000 : null;
+      return { nombre: a?.name || "DXF", cantidad: q || null, largo: l || null, ancho: w || null, area };
+    })
+    .filter((d) => d.cantidad || d.nombre);
+}
+
 function nro(n) {
   return n != null ? "T-" + String(n).padStart(4, "0") : null;
 }
@@ -71,7 +109,29 @@ export default function TrabajosPage() {
   const [archivosAbiertos, setArchivosAbiertos] = useState(null);
 
   const esLaser = form.tipo === "Corte Láser";
-  const m2Preview = useMemo(() => calcularM2(form.largo_mm, form.ancho_mm, form.cantidad), [form.largo_mm, form.ancho_mm, form.cantidad]);
+  const corteComputo = useMemo(() => {
+    if (form.tipo !== "Corte Láser") return { total: null, piezas: 0, porArchivo: false, faltanMedidas: false };
+    const actuales = (archivosActuales || []).map((a) => ({
+      cantidad: a.cantidad,
+      largo_mm: a.largo_mm || form.largo_mm,
+      ancho_mm: a.ancho_mm || form.ancho_mm,
+    }));
+    const nuevos = (archivosSeleccionados || []).map((n) => ({
+      cantidad: n.cantidad,
+      largo_mm: n.largo_mm || form.largo_mm,
+      ancho_mm: n.ancho_mm || form.ancho_mm,
+    }));
+    const todos = [...actuales, ...nuevos];
+    const conCantidad = todos.filter((a) => numV(a.cantidad) > 0);
+    if (conCantidad.length > 0) {
+      const piezas = conCantidad.reduce((acc, a) => acc + numV(a.cantidad), 0);
+      const total = conCantidad.reduce((acc, a) => acc + areaDeArchivo(a, form.largo_mm, form.ancho_mm), 0);
+      const faltanMedidas = conCantidad.some((a) => !(numV(a.largo_mm) || numV(form.largo_mm)) || !(numV(a.ancho_mm) || numV(form.ancho_mm)));
+      return { total: total > 0 ? total : 0, piezas, porArchivo: true, faltanMedidas };
+    }
+    return { total: calcularM2(form.largo_mm, form.ancho_mm, form.cantidad), piezas: numV(form.cantidad) || 0, porArchivo: false, faltanMedidas: false };
+  }, [form.tipo, form.largo_mm, form.ancho_mm, form.cantidad, archivosActuales, archivosSeleccionados]);
+  const m2Preview = corteComputo.total;
 
   const obraPorId = useMemo(() => {
     const map = {};
@@ -132,7 +192,7 @@ export default function TrabajosPage() {
       fabricacion_id: t.fabricacion_id != null ? String(t.fabricacion_id) : "",
     });
     setArchivosSeleccionados([]);
-    setArchivosActuales(Array.isArray(t.archivo_dxf) ? t.archivo_dxf : t.archivo_dxf ? [t.archivo_dxf] : []);
+    setArchivosActuales(archivosDe(t).map(normalizarArchivo).filter(Boolean));
     setError(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -143,11 +203,20 @@ export default function TrabajosPage() {
     setError(null);
     setEnviando(true);
 
-    // 1. Subir los archivos DXF nuevos seleccionados.
-    let archivo_dxf = editingId ? undefined : []; // undefined = no tocar el campo al editar si no se sube uno nuevo
-    if (archivosSeleccionados.length > 0) {
-      const lista = editingId ? [...archivosActuales] : [];
-      for (const file of archivosSeleccionados) {
+    // 1. Subir los archivos DXF nuevos y guardar cantidad/medidas por archivo.
+    let archivo_dxf = editingId ? undefined : [];
+    let cantidadPorArchivo = [];
+    if (esLaser) {
+      const actualesParaGuardar = (archivosActuales || []).map((a) => ({
+        name: a.name,
+        url: a.url,
+        cantidad: a.cantidad !== "" && a.cantidad != null ? Number(a.cantidad) : null,
+        largo_mm: a.largo_mm !== "" && a.largo_mm != null ? Number(a.largo_mm) : null,
+        ancho_mm: a.ancho_mm !== "" && a.ancho_mm != null ? Number(a.ancho_mm) : null,
+      }));
+      const lista = [...actualesParaGuardar];
+      for (const item of archivosSeleccionados) {
+        const file = item.file || item;
         const nombreSeguro = file.name
           .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
           .replace(/[^a-zA-Z0-9._-]/g, "_");
@@ -159,18 +228,38 @@ export default function TrabajosPage() {
           return;
         }
         const { data: pub } = supabase.storage.from("trabajos-archivos").getPublicUrl(path);
-        lista.push({ name: file.name, url: pub.publicUrl });
+        lista.push({
+          name: file.name,
+          url: pub.publicUrl,
+          cantidad: item.cantidad !== "" && item.cantidad != null ? Number(item.cantidad) : null,
+          largo_mm: item.largo_mm !== "" && item.largo_mm != null ? Number(item.largo_mm) : null,
+          ancho_mm: item.ancho_mm !== "" && item.ancho_mm != null ? Number(item.ancho_mm) : null,
+        });
       }
       archivo_dxf = lista;
+      cantidadPorArchivo = lista.filter((a) => numV(a.cantidad) > 0);
     }
 
-    const metros_cuadrados = esLaser ? calcularM2(form.largo_mm, form.ancho_mm, form.cantidad) : null;
+    let metros_cuadrados;
+    let cantidadFinal;
+    if (esLaser && cantidadPorArchivo.length > 0) {
+      cantidadFinal = cantidadPorArchivo.reduce((acc, a) => acc + numV(a.cantidad), 0);
+      const total = cantidadPorArchivo.reduce((acc, a) => acc + areaDeArchivo({
+        cantidad: a.cantidad,
+        largo_mm: a.largo_mm ?? form.largo_mm,
+        ancho_mm: a.ancho_mm ?? form.ancho_mm,
+      }, form.largo_mm, form.ancho_mm), 0);
+      metros_cuadrados = total > 0 ? total : calcularM2(form.largo_mm, form.ancho_mm, cantidadFinal);
+    } else {
+      metros_cuadrados = esLaser ? calcularM2(form.largo_mm, form.ancho_mm, form.cantidad) : null;
+      cantidadFinal = form.cantidad ? Number(form.cantidad) : null;
+    }
 
     const payload = {
       tipo: form.tipo,
       cliente: form.cliente || null,
       descripcion: form.descripcion || null,
-      cantidad: form.cantidad ? Number(form.cantidad) : null,
+      cantidad: cantidadFinal,
       duracion_minutos: esLaser && form.duracion_minutos ? Number(form.duracion_minutos) : null,
       duracion_horas: !esLaser && form.duracion_horas ? Number(form.duracion_horas) : null,
       material: form.material || null,
@@ -234,6 +323,7 @@ export default function TrabajosPage() {
       "Largo (mm)": t.largo_mm ?? "",
       "Ancho (mm)": t.ancho_mm ?? "",
       "m²": t.metros_cuadrados ?? "",
+      "Detalle cortes DXF": detalleCortes(t).map((d) => `${d.nombre} x${d.cantidad ?? "—"}${d.largo && d.ancho ? ` (${d.largo}x${d.ancho}mm${d.area != null ? ` = ${d.area.toFixed(3)}m²` : ""})` : ""}`).join(" | "),
       Material: t.material || "",
       Usuario: t.usuario_email || "",
     }));
@@ -326,11 +416,22 @@ export default function TrabajosPage() {
             )}
           </div>
 
-          {esLaser && m2Preview != null && (
-            <div className="flex items-center gap-2 bg-[#F2EEE3] border border-line rounded-sm px-3 py-2 mb-3 -mt-1">
+          {esLaser && (m2Preview != null || corteComputo.porArchivo) && (
+            <div className="flex flex-wrap items-center gap-2 bg-[#F2EEE3] border border-line rounded-sm px-3 py-2 mb-3 -mt-1">
               <span className="text-xs text-[#6B6558]">Área total:</span>
-              <span className="text-sm font-semibold text-ink font-mono">{m2Preview.toFixed(3)} m²</span>
-              {Number(form.cantidad) > 1 && <span className="text-xs text-[#8A8578]">({form.cantidad} piezas)</span>}
+              {m2Preview != null && m2Preview > 0 ? (
+                <span className="text-sm font-semibold text-ink font-mono">{m2Preview.toFixed(3)} m²</span>
+              ) : (
+                <span className="text-xs text-[#B25A1E]">cargá largo y ancho (general o por archivo)</span>
+              )}
+              {corteComputo.porArchivo ? (
+                <span className="text-xs text-[#8A8578]">({corteComputo.piezas} piezas en archivos)</span>
+              ) : (
+                Number(form.cantidad) > 1 && <span className="text-xs text-[#8A8578]">({form.cantidad} piezas)</span>
+              )}
+              {corteComputo.porArchivo && corteComputo.faltanMedidas && (
+                <span className="text-xs text-[#B25A1E]">· faltan medidas en algún archivo</span>
+              )}
             </div>
           )}
 
@@ -353,7 +454,7 @@ export default function TrabajosPage() {
           </Field>
 
           {esLaser && (
-            <Field label={editingId ? "Agregar archivos DXF (opcional)" : "Archivos DXF para el operador (opcional)"}>
+            <Field label={editingId ? "Archivos DXF: cantidad a cortar por archivo (opcional)" : "Archivos DXF para el operador: cantidad a cortar por archivo (opcional)"}>
               <label className="flex items-center gap-2 border border-dashed border-line rounded-sm px-3 py-2.5 text-sm text-[#6B6558] cursor-pointer hover:bg-[#F2EEE3] transition-colors">
                 <Paperclip size={15} />
                 {archivosSeleccionados.length > 0 ? `${archivosSeleccionados.length} archivo(s) nuevo(s)` : "Elegir archivos .dxf (podés elegir varios)"}
@@ -362,25 +463,58 @@ export default function TrabajosPage() {
                   accept=".dxf"
                   multiple
                   className="hidden"
-                  onChange={(e) => setArchivosSeleccionados(Array.from(e.target.files || []))}
+                  onChange={(e) => setArchivosSeleccionados(Array.from(e.target.files || []).map((file) => ({ file, cantidad: "1", largo_mm: form.largo_mm || "", ancho_mm: form.ancho_mm || "" })))}
                 />
               </label>
-              {editingId && archivosActuales.length > 0 && (
-                <ul className="mt-2 space-y-1">
+              <p className="text-[11px] text-[#8A8578] mt-1">Marcá cuántas piezas hay que cortar de cada archivo. Si el archivo tiene otra medida, cargala ahí; si lo dejás vacío se usa el largo/ancho general.</p>
+              {archivosActuales.length > 0 && (
+                <ul className="mt-2 space-y-2">
                   {archivosActuales.map((a, idx) => (
-                    <li key={`a${idx}`} className="flex items-center justify-between bg-[#F2EEE3] rounded-sm px-2.5 py-1.5 text-xs text-[#4A463D]">
-                      <a href={a.url} target="_blank" rel="noopener noreferrer" className="truncate hover:underline">{a.name}</a>
-                      <button type="button" onClick={() => setArchivosActuales((prev) => prev.filter((_, i) => i !== idx))} className="text-[#C7522A] hover:text-red ml-2 shrink-0" title="Quitar archivo">✕</button>
+                    <li key={`a${idx}`} className="bg-[#F2EEE3] rounded-sm px-2.5 py-1.5 text-xs text-[#4A463D]">
+                      <div className="flex items-center justify-between gap-2">
+                        <a href={a.url} target="_blank" rel="noopener noreferrer" className="truncate hover:underline">{a.name}</a>
+                        <button type="button" onClick={() => setArchivosActuales((prev) => prev.filter((_, i) => i !== idx))} className="text-[#C7522A] hover:text-red ml-2 shrink-0" title="Quitar archivo">✕</button>
+                      </div>
+                      <div className="grid grid-cols-3 gap-1.5 mt-1.5">
+                        <label className="block">
+                          <span className="block text-[10px] uppercase tracking-wide text-[#8A8578]">Cant. a cortar</span>
+                          <input type="number" min="0" className={inputCls + " !py-1 !text-xs"} value={a.cantidad} onChange={(e) => setArchivosActuales((prev) => prev.map((x, i) => (i === idx ? { ...x, cantidad: e.target.value } : x)))} placeholder="0" />
+                        </label>
+                        <label className="block">
+                          <span className="block text-[10px] uppercase tracking-wide text-[#8A8578]">Largo mm</span>
+                          <input type="number" min="0" className={inputCls + " !py-1 !text-xs"} value={a.largo_mm} onChange={(e) => setArchivosActuales((prev) => prev.map((x, i) => (i === idx ? { ...x, largo_mm: e.target.value } : x)))} placeholder={form.largo_mm || "gral."} />
+                        </label>
+                        <label className="block">
+                          <span className="block text-[10px] uppercase tracking-wide text-[#8A8578]">Ancho mm</span>
+                          <input type="number" min="0" className={inputCls + " !py-1 !text-xs"} value={a.ancho_mm} onChange={(e) => setArchivosActuales((prev) => prev.map((x, i) => (i === idx ? { ...x, ancho_mm: e.target.value } : x)))} placeholder={form.ancho_mm || "gral."} />
+                        </label>
+                      </div>
                     </li>
                   ))}
                 </ul>
               )}
               {archivosSeleccionados.length > 0 && (
-                <ul className="mt-2 space-y-1">
-                  {archivosSeleccionados.map((f, idx) => (
-                    <li key={`s${idx}`} className="flex items-center justify-between bg-[#F7F4EC] rounded-sm px-2.5 py-1.5 text-xs text-[#4A463D]">
-                      <span className="truncate pr-2">{f.name}</span>
-                      <button type="button" onClick={() => setArchivosSeleccionados((prev) => prev.filter((_, i) => i !== idx))} className="text-[#C7522A] hover:text-red shrink-0" title="Quitar">✕</button>
+                <ul className="mt-2 space-y-2">
+                  {archivosSeleccionados.map((item, idx) => (
+                    <li key={`s${idx}`} className="bg-[#F7F4EC] rounded-sm px-2.5 py-1.5 text-xs text-[#4A463D]">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate pr-2">{item.file?.name || "archivo.dxf"}</span>
+                        <button type="button" onClick={() => setArchivosSeleccionados((prev) => prev.filter((_, i) => i !== idx))} className="text-[#C7522A] hover:text-red shrink-0" title="Quitar">✕</button>
+                      </div>
+                      <div className="grid grid-cols-3 gap-1.5 mt-1.5">
+                        <label className="block">
+                          <span className="block text-[10px] uppercase tracking-wide text-[#8A8578]">Cant. a cortar</span>
+                          <input type="number" min="0" className={inputCls + " !py-1 !text-xs"} value={item.cantidad} onChange={(e) => setArchivosSeleccionados((prev) => prev.map((x, i) => (i === idx ? { ...x, cantidad: e.target.value } : x)))} placeholder="0" />
+                        </label>
+                        <label className="block">
+                          <span className="block text-[10px] uppercase tracking-wide text-[#8A8578]">Largo mm</span>
+                          <input type="number" min="0" className={inputCls + " !py-1 !text-xs"} value={item.largo_mm} onChange={(e) => setArchivosSeleccionados((prev) => prev.map((x, i) => (i === idx ? { ...x, largo_mm: e.target.value } : x)))} placeholder={form.largo_mm || "gral."} />
+                        </label>
+                        <label className="block">
+                          <span className="block text-[10px] uppercase tracking-wide text-[#8A8578]">Ancho mm</span>
+                          <input type="number" min="0" className={inputCls + " !py-1 !text-xs"} value={item.ancho_mm} onChange={(e) => setArchivosSeleccionados((prev) => prev.map((x, i) => (i === idx ? { ...x, ancho_mm: e.target.value } : x)))} placeholder={form.ancho_mm || "gral."} />
+                        </label>
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -627,6 +761,13 @@ export default function TrabajosPage() {
                   <tr><td className="pc-label">Largo</td><td>{tarjeta.largo_mm != null ? `${tarjeta.largo_mm} mm` : "—"}</td></tr>
                   <tr><td className="pc-label">Ancho</td><td>{tarjeta.ancho_mm != null ? `${tarjeta.ancho_mm} mm` : "—"}</td></tr>
                   <tr><td className="pc-label">Área total</td><td>{tarjeta.metros_cuadrados != null ? `${Number(tarjeta.metros_cuadrados).toFixed(3)} m²` : "—"}</td></tr>
+                  {detalleCortes(tarjeta).some((d) => d.cantidad) && (
+                    <tr><td className="pc-label">Cortes por archivo</td><td>
+                      {detalleCortes(tarjeta).filter((d) => d.cantidad).map((d, i) => (
+                        <div key={i}>{d.nombre} x{d.cantidad}{d.largo && d.ancho ? ` (${d.largo}x${d.ancho}mm${d.area != null ? ` = ${d.area.toFixed(3)}m²` : ""})` : ""}</div>
+                      ))}
+                    </td></tr>
+                  )}
                 </>
               )}
               <tr><td className="pc-label">Material</td><td>{tarjeta.material || "—"}</td></tr>
@@ -650,13 +791,23 @@ export default function TrabajosPage() {
               {archivosAbiertos.cliente || "Sin cliente"} · {archivosDe(archivosAbiertos).length} archivo{archivosDe(archivosAbiertos).length !== 1 ? "s" : ""}
             </p>
             <ul className="space-y-2">
-              {archivosDe(archivosAbiertos).map((a, i) => (
-                <li key={i}>
-                  <a href={a.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-[#3B5166] hover:underline bg-[#F7F4EC] rounded-sm px-3 py-2">
-                    <FileText size={14} /> <span className="truncate">{a.name}</span>
-                  </a>
-                </li>
-              ))}
+              {detalleCortes(archivosAbiertos).map((d, i) => {
+                const a = archivosDe(archivosAbiertos)[i];
+                return (
+                  <li key={i} className="bg-[#F7F4EC] rounded-sm px-3 py-2">
+                    <a href={a?.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-[#3B5166] hover:underline">
+                      <FileText size={14} /> <span className="truncate">{d.nombre}</span>
+                    </a>
+                    {(d.cantidad || d.largo || d.ancho) && (
+                      <p className="text-xs text-[#6B6558] mt-1 font-mono">
+                        {d.cantidad ? `x${d.cantidad}` : ""}
+                        {d.largo && d.ancho ? ` · ${d.largo}x${d.ancho}mm` : ""}
+                        {d.area != null ? ` = ${d.area.toFixed(3)}m²` : ""}
+                      </p>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           </div>
         </div>
