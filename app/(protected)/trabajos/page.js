@@ -392,9 +392,11 @@ export default function TrabajosPage() {
           </Field>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <Field label="Cantidad">
-              <input type="number" className={inputCls} value={form.cantidad} onChange={(e) => setForm({ ...form, cantidad: e.target.value })} />
-            </Field>
+            {!esLaser && (
+              <Field label="Cantidad">
+                <input type="number" className={inputCls} value={form.cantidad} onChange={(e) => setForm({ ...form, cantidad: e.target.value })} />
+              </Field>
+            )}
             {esLaser ? (
               <Field label="Duración (min)">
                 <input type="number" className={inputCls} value={form.duracion_minutos} onChange={(e) => setForm({ ...form, duracion_minutos: e.target.value })} />
@@ -404,17 +406,10 @@ export default function TrabajosPage() {
                 <input type="number" step="0.5" className={inputCls} value={form.duracion_horas} onChange={(e) => setForm({ ...form, duracion_horas: e.target.value })} />
               </Field>
             )}
-            {esLaser && (
-              <>
-                <Field label="Largo (mm)">
-                  <input type="number" className={inputCls} value={form.largo_mm} onChange={(e) => setForm({ ...form, largo_mm: e.target.value })} />
-                </Field>
-                <Field label="Ancho (mm)">
-                  <input type="number" className={inputCls} value={form.ancho_mm} onChange={(e) => setForm({ ...form, ancho_mm: e.target.value })} />
-                </Field>
-              </>
-            )}
           </div>
+          {esLaser && (
+            <p className="text-[11px] text-[#8A8578] -mt-1 mb-3">La cantidad y las medidas se cargan por archivo DXF más abajo.</p>
+          )}
 
           {esLaser && (m2Preview != null || corteComputo.porArchivo) && (
             <div className="flex flex-wrap items-center gap-2 bg-[#F2EEE3] border border-line rounded-sm px-3 py-2 mb-3 -mt-1">
@@ -422,7 +417,7 @@ export default function TrabajosPage() {
               {m2Preview != null && m2Preview > 0 ? (
                 <span className="text-sm font-semibold text-ink font-mono">{m2Preview.toFixed(3)} m²</span>
               ) : (
-                <span className="text-xs text-[#B25A1E]">cargá largo y ancho (general o por archivo)</span>
+                <span className="text-xs text-[#B25A1E]">cargá cantidad, largo y ancho en cada archivo</span>
               )}
               {corteComputo.porArchivo ? (
                 <span className="text-xs text-[#8A8578]">({corteComputo.piezas} piezas en archivos)</span>
@@ -463,10 +458,10 @@ export default function TrabajosPage() {
                   accept=".dxf"
                   multiple
                   className="hidden"
-                  onChange={(e) => setArchivosSeleccionados(Array.from(e.target.files || []).map((file) => ({ file, cantidad: "1", largo_mm: form.largo_mm || "", ancho_mm: form.ancho_mm || "" })))}
+                  onChange={(e) => setArchivosSeleccionados(Array.from(e.target.files || []).map((file) => ({ file, cantidad: "1", largo_mm: "", ancho_mm: "" })))}
                 />
               </label>
-              <p className="text-[11px] text-[#8A8578] mt-1">Marcá cuántas piezas hay que cortar de cada archivo. Si el archivo tiene otra medida, cargala ahí; si lo dejás vacío se usa el largo/ancho general.</p>
+              <p className="text-[11px] text-[#8A8578] mt-1">Marcá cuántas piezas hay que cortar de cada archivo, con su largo y ancho en mm.</p>
               {archivosActuales.length > 0 && (
                 <ul className="mt-2 space-y-2">
                   {archivosActuales.map((a, idx) => (
@@ -482,11 +477,11 @@ export default function TrabajosPage() {
                         </label>
                         <label className="block">
                           <span className="block text-[10px] uppercase tracking-wide text-[#8A8578]">Largo mm</span>
-                          <input type="number" min="0" className={inputCls + " !py-1 !text-xs"} value={a.largo_mm} onChange={(e) => setArchivosActuales((prev) => prev.map((x, i) => (i === idx ? { ...x, largo_mm: e.target.value } : x)))} placeholder={form.largo_mm || "gral."} />
+                          <input type="number" min="0" className={inputCls + " !py-1 !text-xs"} value={a.largo_mm} onChange={(e) => setArchivosActuales((prev) => prev.map((x, i) => (i === idx ? { ...x, largo_mm: e.target.value } : x)))} placeholder="mm" />
                         </label>
                         <label className="block">
                           <span className="block text-[10px] uppercase tracking-wide text-[#8A8578]">Ancho mm</span>
-                          <input type="number" min="0" className={inputCls + " !py-1 !text-xs"} value={a.ancho_mm} onChange={(e) => setArchivosActuales((prev) => prev.map((x, i) => (i === idx ? { ...x, ancho_mm: e.target.value } : x)))} placeholder={form.ancho_mm || "gral."} />
+                          <input type="number" min="0" className={inputCls + " !py-1 !text-xs"} value={a.ancho_mm} onChange={(e) => setArchivosActuales((prev) => prev.map((x, i) => (i === idx ? { ...x, ancho_mm: e.target.value } : x)))} placeholder="mm" />
                         </label>
                       </div>
                     </li>
@@ -508,11 +503,11 @@ export default function TrabajosPage() {
                         </label>
                         <label className="block">
                           <span className="block text-[10px] uppercase tracking-wide text-[#8A8578]">Largo mm</span>
-                          <input type="number" min="0" className={inputCls + " !py-1 !text-xs"} value={item.largo_mm} onChange={(e) => setArchivosSeleccionados((prev) => prev.map((x, i) => (i === idx ? { ...x, largo_mm: e.target.value } : x)))} placeholder={form.largo_mm || "gral."} />
+                          <input type="number" min="0" className={inputCls + " !py-1 !text-xs"} value={item.largo_mm} onChange={(e) => setArchivosSeleccionados((prev) => prev.map((x, i) => (i === idx ? { ...x, largo_mm: e.target.value } : x)))} placeholder="mm" />
                         </label>
                         <label className="block">
                           <span className="block text-[10px] uppercase tracking-wide text-[#8A8578]">Ancho mm</span>
-                          <input type="number" min="0" className={inputCls + " !py-1 !text-xs"} value={item.ancho_mm} onChange={(e) => setArchivosSeleccionados((prev) => prev.map((x, i) => (i === idx ? { ...x, ancho_mm: e.target.value } : x)))} placeholder={form.ancho_mm || "gral."} />
+                          <input type="number" min="0" className={inputCls + " !py-1 !text-xs"} value={item.ancho_mm} onChange={(e) => setArchivosSeleccionados((prev) => prev.map((x, i) => (i === idx ? { ...x, ancho_mm: e.target.value } : x)))} placeholder="mm" />
                         </label>
                       </div>
                     </li>
@@ -758,8 +753,8 @@ export default function TrabajosPage() {
               </tr>
               {tarjeta.tipo === "Corte Láser" && (
                 <>
-                  <tr><td className="pc-label">Largo</td><td>{tarjeta.largo_mm != null ? `${tarjeta.largo_mm} mm` : "—"}</td></tr>
-                  <tr><td className="pc-label">Ancho</td><td>{tarjeta.ancho_mm != null ? `${tarjeta.ancho_mm} mm` : "—"}</td></tr>
+                  {tarjeta.largo_mm != null && <tr><td className="pc-label">Largo</td><td>{tarjeta.largo_mm} mm</td></tr>}
+                  {tarjeta.ancho_mm != null && <tr><td className="pc-label">Ancho</td><td>{tarjeta.ancho_mm} mm</td></tr>}
                   <tr><td className="pc-label">Área total</td><td>{tarjeta.metros_cuadrados != null ? `${Number(tarjeta.metros_cuadrados).toFixed(3)} m²` : "—"}</td></tr>
                   {detalleCortes(tarjeta).some((d) => d.cantidad) && (
                     <tr><td className="pc-label">Cortes por archivo</td><td>
