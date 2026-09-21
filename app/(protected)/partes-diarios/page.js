@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
 import { useAuth } from "../../../lib/AuthContext";
-import { ClipboardList, Plus, X, Pencil, Trash2, Paperclip, FileText, Printer } from "lucide-react";
+import { ClipboardList, Plus, X, Pencil, Trash2, Paperclip, FileText, Printer, ShieldCheck, ChevronDown } from "lucide-react";
 
 const inputCls = "w-full px-3 py-2 bg-white border border-line rounded-sm text-sm text-ink focus:outline-none focus:ring-2 focus:ring-green focus:border-transparent";
 const textareaCls = inputCls + " resize-y min-h-[90px]";
@@ -59,6 +59,11 @@ export default function PartesDiariosPage() {
   const [filtroFrente, setFiltroFrente] = useState("todos");
   const [imprimirParte, setImprimirParte] = useState(null);
   const [imprimirConImagenes, setImprimirConImagenes] = useState(true);
+  const [accesos, setAccesos] = useState([]);
+  const [accesoEmail, setAccesoEmail] = useState("");
+  const [accesoFrente, setAccesoFrente] = useState("");
+  const [guardandoAcceso, setGuardandoAcceso] = useState(false);
+  const [mostrarAccesos, setMostrarAccesos] = useState(false);
 
   useEffect(() => {
     if (rol && rol !== "admin" && rol !== "encargado" && rol !== "supervision") router.replace("/ingreso-egreso");
@@ -289,6 +294,64 @@ export default function PartesDiariosPage() {
     return esAdmin || parte.usuario_email === session?.user?.email;
   }
 
+  async function cargarAccesos() {
+    const { data, error } = await supabase.rpc("lista_supervision_accesos");
+    if (!error) setAccesos(data || []);
+  }
+
+  useEffect(() => {
+    if (rol === "admin") cargarAccesos();
+  }, [rol]);
+
+  async function asignarAcceso(e) {
+    e.preventDefault();
+    setError(null);
+    if (!accesoEmail.trim() || !accesoFrente) {
+      setError("Escribí el correo del supervisor y elegí el frente.");
+      return;
+    }
+    setGuardandoAcceso(true);
+    const { data, error } = await supabase.rpc("asignar_frente_supervision", {
+      p_email: accesoEmail.trim(),
+      p_frente_id: accesoFrente,
+    });
+    setGuardandoAcceso(false);
+    const r = data?.[0];
+    if (error || !r?.ok) {
+      setError(error?.message || r?.mensaje || "No se pudo otorgar el acceso.");
+      return;
+    }
+    setAccesoEmail("");
+    setAccesoFrente("");
+    setConfirmacion("Acceso otorgado");
+    setTimeout(() => setConfirmacion(null), 3000);
+    cargarAccesos();
+  }
+
+  async function quitarAcceso(userId, frenteId) {
+    setError(null);
+    const { data, error } = await supabase.rpc("quitar_frente_supervision", {
+      p_user_id: userId,
+      p_frente_id: frenteId,
+    });
+    const r = data?.[0];
+    if (error || !r?.ok) {
+      setError(error?.message || r?.mensaje || "No se pudo quitar el acceso.");
+      return;
+    }
+    setConfirmacion("Acceso quitado");
+    setTimeout(() => setConfirmacion(null), 3000);
+    cargarAccesos();
+  }
+
+  const accesosPorEmail = useMemo(() => {
+    const map = {};
+    accesos.forEach((a) => {
+      (map[a.email] = map[a.email] || []).push(a);
+    });
+    return map;
+  }, [accesos]);
+
   function imprimir(parte) {
     setImprimirParte(parte);
     setImprimirConImagenes(true);
@@ -309,7 +372,7 @@ export default function PartesDiariosPage() {
           <ClipboardList size={20} color="#F4791E" />
           <div>
             <h1 className="font-display text-3xl font-semibold">Partes diarios</h1>
-            <p className="text-sm text-[#6B6558] mt-0.5">{esAdmin || esSupervision ? "Todos los frentes" : "Tu frente"}</p>
+            <p className="text-sm text-[#6B6558] mt-0.5">{esAdmin ? "Todos los frentes" : esSupervision ? "Frentes asignados" : "Tu frente"}</p>
           </div>
         </div>
         {!soloLectura && (
@@ -336,6 +399,62 @@ export default function PartesDiariosPage() {
               </option>
             ))}
           </select>
+        </div>
+      )}
+
+      {esAdmin && (
+        <div className="bg-white border border-line rounded-sm mb-4">
+          <button
+            onClick={() => setMostrarAccesos((v) => !v)}
+            className="w-full flex items-center justify-between gap-2 px-4 py-3 text-left"
+          >
+            <span className="flex items-center gap-2 text-sm font-medium text-ink">
+              <ShieldCheck size={15} color="#F4791E" /> Accesos de supervisión ({accesos.length})
+            </span>
+            <ChevronDown size={15} className={`text-[#8A8578] transition-transform ${mostrarAccesos ? "rotate-180" : ""}`} />
+          </button>
+          {mostrarAccesos && (
+            <div className="px-4 pb-4 pt-1 border-t border-[#EFEBE0]">
+              <p className="text-xs text-[#6B6558] my-2">Elegí qué frentes puede ver cada supervisor (solo lectura e impresión).</p>
+              <form onSubmit={asignarAcceso} className="flex flex-col sm:flex-row gap-2 mb-3">
+                <input
+                  className={inputCls + " flex-1"}
+                  value={accesoEmail}
+                  onChange={(e) => setAccesoEmail(e.target.value)}
+                  placeholder="Correo del supervisor"
+                />
+                <select className={inputCls + " sm:w-52"} value={accesoFrente} onChange={(e) => setAccesoFrente(e.target.value)}>
+                  <option value="">— Frente —</option>
+                  {frentes.map((f) => (
+                    <option key={f.id} value={f.id}>{f.nombre}</option>
+                  ))}
+                </select>
+                <button type="submit" disabled={guardandoAcceso} className="bg-ink text-paper px-4 py-2 rounded-sm text-sm font-medium hover:bg-[#333731] disabled:opacity-60 shrink-0">
+                  {guardandoAcceso ? "Guardando..." : "Otorgar"}
+                </button>
+              </form>
+              {Object.keys(accesosPorEmail).length === 0 && (
+                <p className="text-xs text-[#8A8578]">Todavía no hay accesos otorgados.</p>
+              )}
+              {Object.entries(accesosPorEmail).map(([email, lista]) => (
+                <div key={email} className="flex items-start justify-between gap-2 py-2 border-t border-[#EFEBE0] first:border-t-0">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-ink truncate">{email}</div>
+                    <div className="flex flex-wrap gap-1.5 mt-1">
+                      {lista.map((a) => (
+                        <span key={a.frente_id} className="inline-flex items-center gap-1 text-xs bg-[#F7F4EC] border border-[#EFEBE0] rounded-sm px-2 py-0.5">
+                          {a.frente_nombre}
+                          <button onClick={() => quitarAcceso(a.user_id, a.frente_id)} className="text-[#C7522A] hover:text-red" title="Quitar acceso">
+                            <X size={12} />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
