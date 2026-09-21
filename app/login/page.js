@@ -37,7 +37,7 @@ export default function LoginPage() {
         .eq("id", user.id)
         .maybeSingle();
       if (perfil?.rol === "admin") destino = "/panel";
-      else if (perfil?.rol === "encargado") destino = "/partes-diarios";
+      else if (perfil?.rol === "encargado" || perfil?.rol === "supervision") destino = "/partes-diarios";
       else if (perfil?.rol === "grua") destino = "/grua";
     }
     router.replace(destino);

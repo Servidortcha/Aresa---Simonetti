@@ -12,7 +12,7 @@ function requiredRoles(pathname) {
   if (/^\/precios(\/|$)/.test(pathname)) return ["admin"];
   if (/^\/organigrama(\/|$)/.test(pathname)) return ["admin"];
   if (/^\/grua(\/|$)/.test(pathname)) return ["admin", "grua"];
-  if (/^\/partes-diarios(\/|$)/.test(pathname)) return ["admin", "encargado"];
+  if (/^\/partes-diarios(\/|$)/.test(pathname)) return ["admin", "encargado", "supervision"];
   if (/^\/stock(\/|$)/.test(pathname)) return ["admin", "taller_stock"];
   if (/^\/cajas-acopio(\/|$)/.test(pathname)) return ["admin", "encargado"];
   if (/^\/trabajos(\/|$)/.test(pathname)) return ["admin", "taller_stock"];
@@ -76,7 +76,7 @@ export async function middleware(request) {
   }
 
   const home =
-    rol === "admin" ? "/panel" : rol === "encargado" ? "/partes-diarios" : rol === "grua" ? "/grua" : "/ingreso-egreso";
+    rol === "admin" ? "/panel" : rol === "encargado" || rol === "supervision" ? "/partes-diarios" : rol === "grua" ? "/grua" : "/ingreso-egreso";
 
   if (isLoginRoute) {
     if (authenticated) {

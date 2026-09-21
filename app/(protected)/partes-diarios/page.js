@@ -33,6 +33,8 @@ export default function PartesDiariosPage() {
   const { rol, session } = useAuth();
   const router = useRouter();
   const esAdmin = rol === "admin";
+  const esSupervision = rol === "supervision";
+  const soloLectura = esSupervision;
 
   const [frentes, setFrentes] = useState([]);
   const [partes, setPartes] = useState([]);
@@ -59,7 +61,7 @@ export default function PartesDiariosPage() {
   const [imprimirConImagenes, setImprimirConImagenes] = useState(true);
 
   useEffect(() => {
-    if (rol && rol !== "admin" && rol !== "encargado") router.replace("/ingreso-egreso");
+    if (rol && rol !== "admin" && rol !== "encargado" && rol !== "supervision") router.replace("/ingreso-egreso");
   }, [rol, router]);
 
   useEffect(() => {
@@ -68,8 +70,8 @@ export default function PartesDiariosPage() {
   }, []);
 
   const frentesVisibles = useMemo(
-    () => (esAdmin ? frentes : frentes.filter((f) => f.encargado_user_id === session?.user?.id)),
-    [frentes, esAdmin, session]
+    () => (esAdmin || esSupervision ? frentes : frentes.filter((f) => f.encargado_user_id === session?.user?.id)),
+    [frentes, esAdmin, esSupervision, session]
   );
 
   async function cargar() {
@@ -87,7 +89,7 @@ export default function PartesDiariosPage() {
     else setFrentes(f || []);
     if (ep) setError("Error al cargar partes: " + ep.message);
     else {
-      const visibles = (f || []).filter((x) => esAdmin || x.encargado_user_id === session?.user?.id);
+      const visibles = (f || []).filter((x) => esAdmin || esSupervision || x.encargado_user_id === session?.user?.id);
       const ids = new Set(visibles.map((x) => x.id));
       setPartes((p || []).filter((x) => ids.has(x.frente_id)));
     }
@@ -283,6 +285,7 @@ export default function PartesDiariosPage() {
   }
 
   function puedeEditar(parte) {
+    if (soloLectura) return false;
     return esAdmin || parte.usuario_email === session?.user?.email;
   }
 
@@ -306,18 +309,20 @@ export default function PartesDiariosPage() {
           <ClipboardList size={20} color="#F4791E" />
           <div>
             <h1 className="font-display text-3xl font-semibold">Partes diarios</h1>
-            <p className="text-sm text-[#6B6558] mt-0.5">{esAdmin ? "Todos los frentes" : "Tu frente"}</p>
+            <p className="text-sm text-[#6B6558] mt-0.5">{esAdmin || esSupervision ? "Todos los frentes" : "Tu frente"}</p>
           </div>
         </div>
-        <button onClick={abrirNuevo} className="flex items-center gap-1.5 bg-ink text-paper px-4 py-2 rounded-sm text-sm font-medium hover:bg-[#333731] transition-colors">
-          <Plus size={16} /> Nuevo parte
-        </button>
+        {!soloLectura && (
+          <button onClick={abrirNuevo} className="flex items-center gap-1.5 bg-ink text-paper px-4 py-2 rounded-sm text-sm font-medium hover:bg-[#333731] transition-colors">
+            <Plus size={16} /> Nuevo parte
+          </button>
+        )}
       </div>
 
       {error && <p className="text-sm text-red mb-4">Error: {error}</p>}
       {confirmacion && <p className="text-sm text-green mb-4">{confirmacion}</p>}
 
-      {esAdmin && frentes.length > 0 && (
+      {(esAdmin || esSupervision) && frentes.length > 0 && (
         <div className="mb-4">
           <select
             value={filtroFrente}
