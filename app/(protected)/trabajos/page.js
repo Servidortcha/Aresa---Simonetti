@@ -105,6 +105,8 @@ export default function TrabajosPage() {
   const [enviando, setEnviando] = useState(false);
   const [filtroTipo, setFiltroTipo] = useState("Todos");
   const [filtroEstado, setFiltroEstado] = useState("Todos");
+  const [porPagina, setPorPagina] = useState(10);
+  const [pagina, setPagina] = useState(1);
   const [tarjeta, setTarjeta] = useState(null);
   const [archivosAbiertos, setArchivosAbiertos] = useState(null);
 
@@ -146,6 +148,48 @@ export default function TrabajosPage() {
         .filter((t) => filtroEstado === "Todos" || (filtroEstado === "Pendientes" ? !t.confirmado : t.confirmado)),
     [trabajos, filtroTipo, filtroEstado]
   );
+
+  const totalPaginas = Math.max(1, Math.ceil(trabajosFiltrados.length / porPagina));
+  const paginaSegura = Math.min(Math.max(1, pagina), totalPaginas);
+  const trabajosPagina = trabajosFiltrados.slice((paginaSegura - 1) * porPagina, paginaSegura * porPagina);
+
+  function ControlesPaginacion() {
+    return (
+      <div className="flex items-center gap-3 flex-wrap mb-3">
+        <label className="flex items-center gap-1.5 text-xs text-[#6B6558]">
+          Mostrar
+          <select
+            value={porPagina}
+            onChange={(e) => { setPorPagina(Number(e.target.value)); setPagina(1); }}
+            className="bg-white border border-line rounded-sm px-2 py-1.5 text-sm text-ink"
+          >
+            {[5, 10, 20, 50].map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+        </label>
+        <span className="text-xs text-[#8A8578]">
+          Página {paginaSegura} de {totalPaginas} ({trabajosFiltrados.length} trabajo{trabajosFiltrados.length !== 1 ? "s" : ""})
+        </span>
+        <div className="flex gap-1 ml-auto">
+          <button
+            onClick={() => setPagina((p) => Math.max(1, p - 1))}
+            disabled={paginaSegura <= 1}
+            className="px-3 py-1.5 rounded-sm text-xs font-medium border border-line bg-white disabled:opacity-40"
+          >
+            ← Anterior
+          </button>
+          <button
+            onClick={() => setPagina((p) => Math.min(totalPaginas, p + 1))}
+            disabled={paginaSegura >= totalPaginas}
+            className="px-3 py-1.5 rounded-sm text-xs font-medium border border-line bg-white disabled:opacity-40"
+          >
+            Siguiente →
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   async function cargar() {
     setLoading(true);
@@ -540,7 +584,7 @@ export default function TrabajosPage() {
                 {["Todos", "Pendientes", "Confirmados"].map((e) => (
                   <button
                     key={e}
-                    onClick={() => setFiltroEstado(e)}
+                    onClick={() => { setFiltroEstado(e); setPagina(1); }}
                     className="px-3 py-1.5 rounded-sm text-xs font-medium border transition-colors"
                     style={{
                       backgroundColor: filtroEstado === e ? "#4A4B4D" : "white",
@@ -556,7 +600,7 @@ export default function TrabajosPage() {
                 {["Todos", ...TIPOS].map((t) => (
                   <button
                     key={t}
-                    onClick={() => setFiltroTipo(t)}
+                    onClick={() => { setFiltroTipo(t); setPagina(1); }}
                     className="px-3 py-1.5 rounded-sm text-xs font-medium border transition-colors"
                     style={{
                       backgroundColor: filtroTipo === t ? "#4A4B4D" : "white",
@@ -571,11 +615,13 @@ export default function TrabajosPage() {
             </div>
           </div>
 
+          <ControlesPaginacion />
+
           {/* Móvil: tarjetas */}
           <div className="sm:hidden space-y-3">
             {loading && <p className="text-center text-sm text-[#8A8578] py-8">Cargando...</p>}
             {!loading &&
-              trabajosFiltrados.map((t) => (
+              trabajosPagina.map((t) => (
                 <div key={t.id} className="bg-white border border-line rounded-sm p-4">
                   <div className="flex flex-wrap items-center gap-1.5 mb-2">
                     {t.numero != null && (
@@ -665,8 +711,8 @@ export default function TrabajosPage() {
               </thead>
               <tbody>
                 {loading && <tr><td colSpan={12} className="px-4 py-8 text-center text-sm text-[#8A8578]">Cargando...</td></tr>}
-                {!loading && trabajosFiltrados.map((t, idx) => (
-                  <tr key={t.id} className={`${idx % 2 === 1 ? "bg-[#F7F4EC]" : ""} ${idx !== trabajosFiltrados.length - 1 ? "border-b border-[#EFEBE0]" : ""}`}>
+                {!loading && trabajosPagina.map((t, idx) => (
+                  <tr key={t.id} className={`${idx % 2 === 1 ? "bg-[#F7F4EC]" : ""} ${idx !== trabajosPagina.length - 1 ? "border-b border-[#EFEBE0]" : ""}`}>
                     <td className="px-4 py-3 font-mono whitespace-nowrap">{t.numero != null ? nro(t.numero) : "—"}</td>
                     <td className="px-4 py-3 text-[#6B6558] font-mono whitespace-nowrap">{new Date(t.fecha).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}</td>
                     <td className="px-4 py-3">
@@ -724,6 +770,9 @@ export default function TrabajosPage() {
                 )}
               </tbody>
             </table>
+          </div>
+          <div className="hidden sm:block mt-3">
+            <ControlesPaginacion />
           </div>
         </div>
       </div>
