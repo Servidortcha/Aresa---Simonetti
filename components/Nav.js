@@ -51,7 +51,10 @@ const GROUPS = [
   },
   {
     label: "Organización",
-    items: [{ href: "/organigrama", label: "Organigrama", roles: ["admin"] }],
+    items: [
+      { href: "/organigrama", label: "Organigrama", roles: ["admin"] },
+      { href: "/admin/usuarios", label: "Usuarios", roles: ["admin"] },
+    ],
   },
   {
     label: "RRHH",

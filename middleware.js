@@ -17,6 +17,7 @@ function requiredRoles(pathname) {
   if (/^\/cajas-acopio(\/|$)/.test(pathname)) return ["admin", "encargado"];
   if (/^\/trabajos(\/|$)/.test(pathname)) return ["admin", "taller_stock"];
   if (/^\/nesting(\/|$)/.test(pathname)) return ["admin", "taller_stock"];
+  if (/^\/admin(\/|$)/.test(pathname)) return ["admin"];
   return null;
 }
 
@@ -45,6 +46,8 @@ export async function middleware(request) {
 
   const { pathname } = request.nextUrl;
   const isLoginRoute = pathname === "/login" || pathname.startsWith("/login/");
+  const isRegistroRoute = pathname === "/registro" || pathname.startsWith("/registro/");
+  const isSinAccesoRoute = pathname === "/sin-acceso" || pathname.startsWith("/sin-acceso/");
 
   let user = null;
   let degraded = false;
@@ -61,7 +64,7 @@ export async function middleware(request) {
 
   const authenticated = Boolean(user) || (degraded && hasAuthCookie);
 
-  let rol = "operario";
+  let rol = null;
   if (!degraded && user) {
     try {
       const { data } = await supabase
@@ -73,12 +76,22 @@ export async function middleware(request) {
     } catch {
       rol = "operario";
     }
+  } else if (degraded) {
+    rol = "operario";
   }
 
   const home =
-    rol === "admin" ? "/panel" : rol === "encargado" || rol === "supervision" ? "/partes-diarios" : rol === "grua" ? "/grua" : "/ingreso-egreso";
+    rol === "admin"
+      ? "/panel"
+      : rol === "encargado" || rol === "supervision"
+      ? "/partes-diarios"
+      : rol === "grua"
+      ? "/grua"
+      : rol
+      ? "/ingreso-egreso"
+      : "/sin-acceso";
 
-  if (isLoginRoute) {
+  if (isLoginRoute || isRegistroRoute) {
     if (authenticated) {
       return NextResponse.redirect(new URL(home, request.url));
     }
@@ -89,6 +102,14 @@ export async function middleware(request) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("next", pathname);
     return NextResponse.redirect(loginUrl);
+  }
+
+  if (isSinAccesoRoute) {
+    return response;
+  }
+
+  if (!rol) {
+    return NextResponse.redirect(new URL("/sin-acceso", request.url));
   }
 
   if (pathname === "/") {

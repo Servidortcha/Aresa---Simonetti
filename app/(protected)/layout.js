@@ -11,11 +11,11 @@ export default function ProtectedLayout({ children }) {
   const router = useRouter();
   const [checking, setChecking] = useState(true);
   const [session, setSession] = useState(null);
-  const [rol, setRol] = useState(null);
+  const [rol, setRol] = useState(undefined);
 
   async function loadRol(userId) {
     const { data } = await supabase.from("perfiles").select("rol").eq("id", userId).single();
-    setRol(data?.rol || "operario");
+    setRol(data?.rol ?? null);
   }
 
   useEffect(() => {
@@ -41,7 +41,7 @@ export default function ProtectedLayout({ children }) {
     return () => listener.subscription.unsubscribe();
   }, [router]);
 
-  if (checking || (session && rol === null)) {
+  if (checking || (session && rol === undefined)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-paper text-[#6B6558] text-sm">
         Verificando sesión...
