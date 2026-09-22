@@ -282,7 +282,7 @@ export default function FabricacionPage() {
   }, []);
 
   useEffect(() => {
-    if (rol && rol !== "admin") router.replace("/ingreso-egreso");
+    if (rol && rol !== "admin" && rol !== "subadmin") router.replace("/ingreso-egreso");
   }, [rol, router]);
 
   function mostrarMensaje(texto) {
@@ -705,7 +705,7 @@ export default function FabricacionPage() {
     }
   }
 
-  if (rol && rol !== "admin") return null;
+  if (rol && rol !== "admin" && rol !== "subadmin") return null;
 
   function Tarjeta({ f }) {
     const insumosF = insumosPorFabricacion[f.id] || [];

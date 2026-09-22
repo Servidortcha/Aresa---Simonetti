@@ -186,7 +186,7 @@ export default function PreciosPage() {
   }, []);
 
   useEffect(() => {
-    if (rol && rol !== "admin") router.replace("/ingreso-egreso");
+    if (rol && rol !== "admin" && rol !== "subadmin") router.replace("/ingreso-egreso");
   }, [rol, router]);
 
   function mostrarMensaje(texto) {
@@ -308,7 +308,7 @@ export default function PreciosPage() {
     setExtraIds((prev) => prev.filter((x) => x !== id));
   }
 
-  if (rol && rol !== "admin") return null;
+  if (rol && rol !== "admin" && rol !== "subadmin") return null;
 
   function TarjetaCotizacion({ fab, extra }) {
     const lines = armarLineas(fab, estimadosPorFab, usadosPorFab, preciosMap);

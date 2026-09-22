@@ -88,7 +88,7 @@ export default function TallerPage() {
   }, []);
 
   useEffect(() => {
-    if (rol && rol !== "admin") router.replace("/ingreso-egreso");
+    if (rol && rol !== "admin" && rol !== "subadmin") router.replace("/ingreso-egreso");
   }, [rol, router]);
 
   function agregarArchivos(e) {
@@ -411,7 +411,7 @@ export default function TallerPage() {
     XLSX.writeFile(libro, `taller-${new Date().toISOString().slice(0, 10)}.xlsx`);
   }
 
-  if (rol && rol !== "admin") return null;
+  if (rol && rol !== "admin" && rol !== "subadmin") return null;
 
   return (
     <>

@@ -22,7 +22,7 @@ function Field({ label, children }) {
 export default function GruaPage() {
   const { rol, session } = useAuth();
   const router = useRouter();
-  const puedeAcceder = rol === "admin" || rol === "grua";
+  const puedeAcceder = rol === "admin" || rol === "grua" || rol === "subadmin";
 
   const [trabajos, setTrabajos] = useState([]);
   const [loading, setLoading] = useState(true);

@@ -75,7 +75,7 @@ export default function PanelPage() {
   const [avancePorFab, setAvancePorFab] = useState({});
 
   useEffect(() => {
-    if (rol && rol !== "admin") router.replace("/ingreso-egreso");
+    if (rol && rol !== "admin" && rol !== "subadmin") router.replace("/ingreso-egreso");
   }, [rol, router]);
 
   async function cargar() {
@@ -140,7 +140,7 @@ export default function PanelPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (rol && rol !== "admin") return null;
+  if (rol && rol !== "admin" && rol !== "subadmin") return null;
 
   const partesHoy = partes.filter((p) => p.fecha === hoyLocal);
   const partesMes = partes.filter((p) => (p.fecha || "").slice(0, 7) === hoyLocal.slice(0, 7));

@@ -41,7 +41,7 @@ function toSvgPath(points, holes) {
 export default function NestingPage() {
   const { rol } = useAuth();
   const router = useRouter();
-  const puedeAcceder = rol === "admin" || rol === "taller_stock";
+  const puedeAcceder = rol === "admin" || rol === "taller_stock" || rol === "subadmin";
 
   const [piezas, setPiezas] = useState([]); // { id, name, outer, holes, qty, area, error }
   const [sheetW, setSheetW] = useState("1200");

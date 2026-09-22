@@ -65,7 +65,7 @@ export default function Stock2Page() {
   }, []);
 
   useEffect(() => {
-    if (rol && rol !== "admin") router.replace("/ingreso-egreso");
+    if (rol && rol !== "admin" && rol !== "subadmin") router.replace("/ingreso-egreso");
   }, [rol, router]);
 
   const categorias = useMemo(() => ["Todas", ...new Set(insumos.map((i) => i.categoria).filter(Boolean))], [insumos]);
@@ -210,7 +210,7 @@ export default function Stock2Page() {
     loadInsumos();
   }
 
-  if (rol && rol !== "admin" && rol !== "taller_stock") return null;
+  if (rol && rol !== "admin" && rol !== "subadmin" && rol !== "taller_stock") return null;
 
   return (
     <>

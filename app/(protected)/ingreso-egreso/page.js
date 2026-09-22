@@ -38,7 +38,7 @@ function BtnTipo({ activo, tipo, onClick, children }) {
 export default function IngresoEgresoPage() {
   const { rol, session } = useAuth();
   const soloEgreso = rol === "operario" || rol === "taller_stock";
-  const esAdmin = rol === "admin";
+  const esAdmin = rol === "admin" || rol === "subadmin";
   const [insumos, setInsumos] = useState([]);
   const [depositoSel, setDepositoSel] = useState("Principal");
   const [confirmacion, setConfirmacion] = useState(null);
@@ -92,7 +92,7 @@ export default function IngresoEgresoPage() {
   useEffect(() => {
     async function load() {
       const { data: i } = await supabase.from("insumos").select("*").order("nombre");
-      const visibles = rol === "admin" ? (i || []) : (i || []).filter((x) => x.deposito === "Principal");
+      const visibles = rol === "admin" || rol === "subadmin" ? (i || []) : (i || []).filter((x) => x.deposito === "Principal");
       setInsumos(visibles.filter((x) => x.activo !== false));
     }
     load();

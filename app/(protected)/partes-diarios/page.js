@@ -34,6 +34,7 @@ export default function PartesDiariosPage() {
   const router = useRouter();
   const esAdmin = rol === "admin";
   const esSupervision = rol === "supervision";
+  const esGestion = esAdmin || rol === "subadmin";
   const soloLectura = esSupervision;
 
   const [frentes, setFrentes] = useState([]);
@@ -66,7 +67,7 @@ export default function PartesDiariosPage() {
   const [mostrarAccesos, setMostrarAccesos] = useState(false);
 
   useEffect(() => {
-    if (rol && rol !== "admin" && rol !== "encargado" && rol !== "supervision") router.replace("/ingreso-egreso");
+    if (rol && rol !== "admin" && rol !== "encargado" && rol !== "supervision" && rol !== "subadmin") router.replace("/ingreso-egreso");
   }, [rol, router]);
 
   useEffect(() => {
@@ -75,8 +76,8 @@ export default function PartesDiariosPage() {
   }, []);
 
   const frentesVisibles = useMemo(
-    () => (esAdmin || esSupervision ? frentes : frentes.filter((f) => f.encargado_user_id === session?.user?.id)),
-    [frentes, esAdmin, esSupervision, session]
+    () => (esGestion || esSupervision ? frentes : frentes.filter((f) => f.encargado_user_id === session?.user?.id)),
+    [frentes, esGestion, esSupervision, session]
   );
 
   async function cargar() {
@@ -94,7 +95,7 @@ export default function PartesDiariosPage() {
     else setFrentes(f || []);
     if (ep) setError("Error al cargar partes: " + ep.message);
     else {
-      const visibles = (f || []).filter((x) => esAdmin || esSupervision || x.encargado_user_id === session?.user?.id);
+      const visibles = (f || []).filter((x) => esGestion || esSupervision || x.encargado_user_id === session?.user?.id);
       const ids = new Set(visibles.map((x) => x.id));
       setPartes((p || []).filter((x) => ids.has(x.frente_id)));
     }
@@ -291,7 +292,7 @@ export default function PartesDiariosPage() {
 
   function puedeEditar(parte) {
     if (soloLectura) return false;
-    return esAdmin || parte.usuario_email === session?.user?.email;
+    return esGestion || parte.usuario_email === session?.user?.email;
   }
 
   async function cargarAccesos() {
@@ -372,7 +373,7 @@ export default function PartesDiariosPage() {
           <ClipboardList size={20} color="#F4791E" />
           <div>
             <h1 className="font-display text-3xl font-semibold">Partes diarios</h1>
-            <p className="text-sm text-[#6B6558] mt-0.5">{esAdmin ? "Todos los frentes" : esSupervision ? "Frentes asignados" : "Tu frente"}</p>
+            <p className="text-sm text-[#6B6558] mt-0.5">{esGestion ? "Todos los frentes" : esSupervision ? "Frentes asignados" : "Tu frente"}</p>
           </div>
         </div>
         {!soloLectura && (
@@ -385,7 +386,7 @@ export default function PartesDiariosPage() {
       {error && <p className="text-sm text-red mb-4">Error: {error}</p>}
       {confirmacion && <p className="text-sm text-green mb-4">{confirmacion}</p>}
 
-      {(esAdmin || esSupervision) && frentes.length > 0 && (
+      {(esGestion || esSupervision) && frentes.length > 0 && (
         <div className="mb-4">
           <select
             value={filtroFrente}

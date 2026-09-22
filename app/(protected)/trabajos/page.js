@@ -91,7 +91,7 @@ function archivosDe(t) {
 export default function TrabajosPage() {
   const { rol, session } = useAuth();
   const router = useRouter();
-  const puedeAcceder = rol === "admin" || rol === "taller_stock";
+  const puedeAcceder = rol === "admin" || rol === "taller_stock" || rol === "subadmin";
 
   const [trabajos, setTrabajos] = useState([]);
   const [obras, setObras] = useState([]);

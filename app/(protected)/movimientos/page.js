@@ -49,7 +49,7 @@ export default function MovimientosPage() {
   }, []);
 
   useEffect(() => {
-    if (rol && rol !== "admin") router.replace("/ingreso-egreso");
+    if (rol && rol !== "admin" && rol !== "subadmin") router.replace("/ingreso-egreso");
   }, [rol, router]);
 
   const filtered = useMemo(() => {
@@ -101,7 +101,7 @@ export default function MovimientosPage() {
     XLSX.writeFile(libro, `movimientos-${new Date().toISOString().slice(0, 10)}.xlsx`);
   }
 
-  if (rol && rol !== "admin") return null;
+  if (rol && rol !== "admin" && rol !== "subadmin") return null;
 
   return (
     <>

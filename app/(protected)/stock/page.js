@@ -38,7 +38,7 @@ function Field({ label, children }) {
 export default function StockPage() {
   const { rol, session } = useAuth();
   const router = useRouter();
-  const esAdmin = rol === "admin";
+  const esAdmin = rol === "admin" || rol === "subadmin";
   const soloLectura = rol === "taller_stock";
   const [insumos, setInsumos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -74,7 +74,7 @@ export default function StockPage() {
   }, [rol, depositoSel]);
 
   useEffect(() => {
-    if (rol && rol !== "admin" && rol !== "taller_stock") router.replace("/ingreso-egreso");
+    if (rol && rol !== "admin" && rol !== "subadmin" && rol !== "taller_stock") router.replace("/ingreso-egreso");
   }, [rol, router]);
 
   const categorias = useMemo(() => ["Todas", ...new Set(insumos.map((i) => i.categoria).filter(Boolean))], [insumos]);
@@ -348,7 +348,7 @@ export default function StockPage() {
     }
   }
 
-  if (rol && rol !== "admin" && rol !== "taller_stock") return null;
+  if (rol && rol !== "admin" && rol !== "subadmin" && rol !== "taller_stock") return null;
 
   return (
     <>

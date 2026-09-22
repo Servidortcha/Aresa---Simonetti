@@ -4,19 +4,19 @@ import { createServerClient } from "@supabase/ssr";
 const COOKIE_MARKER = "-auth-token";
 
 function requiredRoles(pathname) {
-  if (/^\/panel(\/|$)/.test(pathname)) return ["admin"];
+  if (/^\/panel(\/|$)/.test(pathname)) return ["admin", "subadmin"];
   if (/^\/rrhh(\/|$)/.test(pathname)) return ["admin"];
-  if (/^\/stock-panol(\/|$)/.test(pathname)) return ["admin"];
-  if (/^\/taller(\/|$)/.test(pathname)) return ["admin"];
-  if (/^\/fabricacion(\/|$)/.test(pathname)) return ["admin"];
-  if (/^\/precios(\/|$)/.test(pathname)) return ["admin"];
-  if (/^\/organigrama(\/|$)/.test(pathname)) return ["admin"];
-  if (/^\/grua(\/|$)/.test(pathname)) return ["admin", "grua"];
-  if (/^\/partes-diarios(\/|$)/.test(pathname)) return ["admin", "encargado", "supervision"];
-  if (/^\/stock(\/|$)/.test(pathname)) return ["admin", "taller_stock"];
-  if (/^\/cajas-acopio(\/|$)/.test(pathname)) return ["admin", "encargado"];
-  if (/^\/trabajos(\/|$)/.test(pathname)) return ["admin", "taller_stock"];
-  if (/^\/nesting(\/|$)/.test(pathname)) return ["admin", "taller_stock"];
+  if (/^\/stock-panol(\/|$)/.test(pathname)) return ["admin", "subadmin"];
+  if (/^\/taller(\/|$)/.test(pathname)) return ["admin", "subadmin"];
+  if (/^\/fabricacion(\/|$)/.test(pathname)) return ["admin", "subadmin"];
+  if (/^\/precios(\/|$)/.test(pathname)) return ["admin", "subadmin"];
+  if (/^\/organigrama(\/|$)/.test(pathname)) return ["admin", "subadmin"];
+  if (/^\/grua(\/|$)/.test(pathname)) return ["admin", "grua", "subadmin"];
+  if (/^\/partes-diarios(\/|$)/.test(pathname)) return ["admin", "encargado", "supervision", "subadmin"];
+  if (/^\/stock(\/|$)/.test(pathname)) return ["admin", "taller_stock", "subadmin"];
+  if (/^\/cajas-acopio(\/|$)/.test(pathname)) return ["admin", "encargado", "subadmin"];
+  if (/^\/trabajos(\/|$)/.test(pathname)) return ["admin", "taller_stock", "subadmin"];
+  if (/^\/nesting(\/|$)/.test(pathname)) return ["admin", "taller_stock", "subadmin"];
   if (/^\/admin(\/|$)/.test(pathname)) return ["admin"];
   return null;
 }
@@ -81,7 +81,7 @@ export async function middleware(request) {
   }
 
   const home =
-    rol === "admin"
+    rol === "admin" || rol === "subadmin"
       ? "/panel"
       : rol === "encargado" || rol === "supervision"
       ? "/partes-diarios"

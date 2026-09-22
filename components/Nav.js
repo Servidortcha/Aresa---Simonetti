@@ -9,50 +9,50 @@ import { supabase } from "../lib/supabaseClient";
 const GROUPS = [
   {
     label: "General",
-    items: [{ href: "/panel", label: "Panel", roles: ["admin"] }],
+    items: [{ href: "/panel", label: "Panel", roles: ["admin", "subadmin"] }],
   },
   {
     label: "Movimiento",
     items: [
-      { href: "/ingreso-egreso", label: "Ingreso / Egreso", roles: ["admin", "taller_stock", "operario"] },
-      { href: "/stock", label: "Stock", roles: ["admin", "taller_stock"] },
-      { href: "/movimientos", label: "Movimientos", roles: ["admin"] },
-      { href: "/stock-panol", label: "Stock Pañol", roles: ["admin"] },
+      { href: "/ingreso-egreso", label: "Ingreso / Egreso", roles: ["admin", "taller_stock", "operario", "subadmin"] },
+      { href: "/stock", label: "Stock", roles: ["admin", "taller_stock", "subadmin"] },
+      { href: "/movimientos", label: "Movimientos", roles: ["admin", "subadmin"] },
+      { href: "/stock-panol", label: "Stock Pañol", roles: ["admin", "subadmin"] },
     ],
   },
   {
     label: "Acopio",
     items: [
-      { href: "/cajas-acopio", label: "Cajas de Acopio", roles: ["admin", "encargado"] },
+      { href: "/cajas-acopio", label: "Cajas de Acopio", roles: ["admin", "encargado", "subadmin"] },
     ],
   },
   {
     label: "Producción",
     items: [
-      { href: "/trabajos", label: "Trabajos", roles: ["admin", "taller_stock"] },
-      { href: "/taller", label: "Taller", roles: ["admin"] },
-      { href: "/fabricacion", label: "Fabricación", roles: ["admin"] },
-      { href: "/partes-diarios", label: "Partes diarios", roles: ["admin", "encargado", "supervision"] },
-      { href: "/grua", label: "Grúa", roles: ["admin", "grua"] },
+      { href: "/trabajos", label: "Trabajos", roles: ["admin", "taller_stock", "subadmin"] },
+      { href: "/taller", label: "Taller", roles: ["admin", "subadmin"] },
+      { href: "/fabricacion", label: "Fabricación", roles: ["admin", "subadmin"] },
+      { href: "/partes-diarios", label: "Partes diarios", roles: ["admin", "encargado", "supervision", "subadmin"] },
+      { href: "/grua", label: "Grúa", roles: ["admin", "grua", "subadmin"] },
     ],
   },
   {
     label: "Comercial",
     items: [
-      { href: "/precios", label: "Precios", roles: ["admin"] },
+      { href: "/precios", label: "Precios", roles: ["admin", "subadmin"] },
     ],
   },
   {
     label: "Herramientas",
     items: [
-      { href: "/nesting", label: "Nesting", roles: ["admin", "taller_stock"] },
-      { href: "/inglete", label: "Inglete", roles: ["admin", "taller_stock", "operario", "encargado"] },
+      { href: "/nesting", label: "Nesting", roles: ["admin", "taller_stock", "subadmin"] },
+      { href: "/inglete", label: "Inglete", roles: ["admin", "taller_stock", "operario", "encargado", "subadmin"] },
     ],
   },
   {
     label: "Organización",
     items: [
-      { href: "/organigrama", label: "Organigrama", roles: ["admin"] },
+      { href: "/organigrama", label: "Organigrama", roles: ["admin", "subadmin"] },
       { href: "/admin/usuarios", label: "Usuarios", roles: ["admin"] },
     ],
   },
