@@ -77,11 +77,18 @@ create policy "frente_personas_admin_all" on public.frente_personas
   using (public.es_gestion())
   with check (public.es_gestion());
 
-drop policy if exists "taller_trabajo_insumos_admin_all" on public.taller_trabajo_insumos;
-create policy "taller_trabajo_insumos_admin_all" on public.taller_trabajo_insumos
-  for all to authenticated
-  using (public.es_gestion())
-  with check (public.es_gestion());
+-- NOTA: la tabla taller_trabajo_insumos fue eliminada en la 0008; solo
+-- se recrea su política si la tabla existe.
+do $$
+begin
+  if exists (select 1 from information_schema.tables where table_schema = 'public' and table_name = 'taller_trabajo_insumos') then
+    drop policy if exists "taller_trabajo_insumos_admin_all" on public.taller_trabajo_insumos;
+    create policy "taller_trabajo_insumos_admin_all" on public.taller_trabajo_insumos
+      for all to authenticated
+      using (public.es_gestion())
+      with check (public.es_gestion());
+  end if;
+end $$;
 
 drop policy if exists "fabricaciones_admin_all" on public.fabricaciones;
 create policy "fabricaciones_admin_all" on public.fabricaciones
