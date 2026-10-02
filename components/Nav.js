@@ -40,6 +40,7 @@ const GROUPS = [
     label: "Comercial",
     items: [
       { href: "/precios", label: "Precios", roles: ["admin", "subadmin"] },
+      { href: "/remitos", label: "Remitos", roles: ["admin", "subadmin"] },
     ],
   },
   {
