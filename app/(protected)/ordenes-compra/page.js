@@ -34,7 +34,7 @@ const ESTADO_STYLE = {
 export default function OrdenesCompraPage() {
   const { rol, session } = useAuth();
   const router = useRouter();
-  const puedeAcceder = rol === "admin" || rol === "subadmin";
+  const puedeAcceder = rol === "admin" || rol === "subadmin" || rol === "compras";
 
   const [ordenes, setOrdenes] = useState([]);
   const [itemsPorOrden, setItemsPorOrden] = useState({});
@@ -344,6 +344,7 @@ export default function OrdenesCompraPage() {
                     <div className="font-medium leading-snug">{o.proveedor || "Sin ferretería"}</div>
                     {o.retirado_por && <p className="text-xs text-[#6B6558] mt-0.5">Retira: {o.retirado_por}</p>}
                     <p className="text-xs text-[#6B6558] mt-1">{items.length} artículo(s)</p>
+                    <p className="text-xs text-[#8A8578] mt-0.5">Hecha por: {o.usuario_email?.replace("@simonetti.local", "") || "—"}</p>
                     <div className="flex items-center gap-2 mt-3 flex-wrap">
                       {o.estado === "pendiente" && (
                         <>
@@ -378,12 +379,13 @@ export default function OrdenesCompraPage() {
                   <th className="px-4 py-3 font-medium">Estado</th>
                   <th className="px-4 py-3 font-medium">Ferretería</th>
                   <th className="px-4 py-3 font-medium">Retira</th>
+                  <th className="px-4 py-3 font-medium">Hecha por</th>
                   <th className="px-4 py-3 font-medium">Artículos</th>
                   <th className="px-4 py-3 font-medium text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody>
-                {loading && <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-[#8A8578]">Cargando...</td></tr>}
+                {loading && <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-[#8A8578]">Cargando...</td></tr>}
                 {!loading && ordenes.map((o, idx) => {
                   const est = ESTADO_STYLE[o.estado] || ESTADO_STYLE.pendiente;
                   const items = itemsPorOrden[o.id] || [];
@@ -398,6 +400,7 @@ export default function OrdenesCompraPage() {
                       </td>
                       <td className="px-4 py-3 text-[#4A463D] whitespace-nowrap">{o.proveedor || "—"}</td>
                       <td className="px-4 py-3 text-[#4A463D] whitespace-nowrap">{o.retirado_por || "—"}</td>
+                      <td className="px-4 py-3 text-[#8A8578] text-xs whitespace-nowrap">{o.usuario_email?.replace("@simonetti.local", "") || "—"}</td>
                       <td className="px-4 py-3 text-[#4A463D] max-w-xs truncate">
                         {items.map((i) => `${i.descripcion} x${i.cantidad}`).join(" · ") || "—"}
                       </td>
@@ -425,7 +428,7 @@ export default function OrdenesCompraPage() {
                   );
                 })}
                 {!loading && ordenes.length === 0 && (
-                  <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-[#8A8578]">Aún no hay órdenes</td></tr>
+                  <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-[#8A8578]">Aún no hay órdenes</td></tr>
                 )}
               </tbody>
             </table>

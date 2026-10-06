@@ -28,7 +28,7 @@ function nro(n) {
 export default function RemitosPage() {
   const { rol, session } = useAuth();
   const router = useRouter();
-  const puedeAcceder = rol === "admin" || rol === "subadmin";
+  const puedeAcceder = rol === "admin" || rol === "subadmin" || rol === "compras";
 
   const [remitos, setRemitos] = useState([]);
   const [itemsPorRemito, setItemsPorRemito] = useState({});

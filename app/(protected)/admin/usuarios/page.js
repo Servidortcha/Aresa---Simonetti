@@ -9,11 +9,12 @@ import { Users, CheckCircle2, ShieldCheck, ChevronDown } from "lucide-react";
 
 const inputCls = "w-full px-3 py-2 bg-white border border-line rounded-sm text-sm text-ink focus:outline-none focus:ring-2 focus:ring-green focus:border-transparent";
 
-const ROLES = ["admin", "subadmin", "taller_stock", "encargado", "operario", "grua", "supervision"];
+const ROLES = ["admin", "subadmin", "taller_stock", "encargado", "operario", "grua", "supervision", "compras"];
 
 const ROL_LABEL = {
   admin: "Administrador",
   subadmin: "Subadministrador",
+  compras: "Compras",
   taller_stock: "Taller / Stock",
   encargado: "Encargado",
   operario: "Operario",
