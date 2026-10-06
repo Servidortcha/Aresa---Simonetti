@@ -4,10 +4,10 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
 import { useAuth } from "../../../lib/AuthContext";
-import { ShoppingCart, Download, Printer, Pencil, Trash2, Plus, X, Check, CheckCheck } from "lucide-react";
+import { ShoppingCart, Download, Printer, Pencil, Trash2, Plus, X, Check } from "lucide-react";
 
-const emptyForm = { proveedor: "", observaciones: "" };
-const emptyItem = () => ({ key: Date.now() + Math.random(), insumoId: "", descripcion: "", cantidad: "", unidad: "unid", precio: "" });
+const emptyForm = { proveedor: "", retiradoPor: "", observaciones: "" };
+const emptyItem = () => ({ key: Date.now() + Math.random(), descripcion: "", cantidad: "", unidad: "unid" });
 
 const inputCls = "w-full px-3 py-2 bg-white border border-line rounded-sm text-sm text-ink focus:outline-none focus:ring-2 focus:ring-green focus:border-transparent";
 
@@ -24,15 +24,9 @@ function nro(n) {
   return n != null ? "OC-" + String(n).padStart(4, "0") : null;
 }
 
-function pesos(n) {
-  const v = Number(n || 0);
-  return "$ " + v.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
 const ESTADO_STYLE = {
   pendiente: { bg: "#FBEFE6", color: "#B25A1E", label: "Pendiente" },
-  aprobada: { bg: "#EAF0F5", color: "#2E6F9E", label: "Aprobada" },
-  recibida: { bg: "#EAF0E4", color: "#3D5A2E", label: "Recibida" },
+  retirada: { bg: "#EAF0E4", color: "#3D5A2E", label: "Retirada" },
   cancelada: { bg: "#EFEBE0", color: "#6B6558", label: "Cancelada" },
 };
 
@@ -43,7 +37,6 @@ export default function OrdenesCompraPage() {
 
   const [ordenes, setOrdenes] = useState([]);
   const [itemsPorOrden, setItemsPorOrden] = useState({});
-  const [insumos, setInsumos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [confirmacion, setConfirmacion] = useState(null);
@@ -56,10 +49,9 @@ export default function OrdenesCompraPage() {
 
   async function cargar() {
     setLoading(true);
-    const [{ data, error }, { data: items, error: errItems }, { data: ins, error: errIns }] = await Promise.all([
+    const [{ data, error }, { data: items, error: errItems }] = await Promise.all([
       supabase.from("ordenes_compra").select("*").order("fecha", { ascending: false }),
       supabase.from("orden_compra_items").select("*"),
-      supabase.from("insumos").select("id, nombre, unidad, deposito, stock").eq("activo", true).order("nombre"),
     ]);
     if (error) setError(error.message);
     else setOrdenes(data || []);
@@ -71,8 +63,6 @@ export default function OrdenesCompraPage() {
       });
       setItemsPorOrden(mapa);
     }
-    if (errIns) setError(errIns.message);
-    else setInsumos(ins || []);
     setLoading(false);
   }
 
@@ -87,17 +77,6 @@ export default function OrdenesCompraPage() {
   function mostrarMensaje(texto) {
     setConfirmacion(texto);
     setTimeout(() => setConfirmacion(null), 3000);
-  }
-
-  function elegirInsumo(key, insumoId) {
-    const ins = insumos.find((i) => String(i.id) === String(insumoId));
-    setFormItems((prev) =>
-      prev.map((it) =>
-        it.key === key
-          ? { ...it, insumoId, descripcion: ins ? ins.nombre : it.descripcion, unidad: ins ? ins.unidad || "unid" : it.unidad }
-          : it
-      )
-    );
   }
 
   function cambiarItem(key, campo, valor) {
@@ -121,18 +100,17 @@ export default function OrdenesCompraPage() {
   }
 
   function abrirEditar(o) {
+    if (o.estado !== "pendiente") return;
     setEditandoId(o.id);
-    setForm({ proveedor: o.proveedor || "", observaciones: o.observaciones || "" });
+    setForm({ proveedor: o.proveedor || "", retiradoPor: o.retirado_por || "", observaciones: o.observaciones || "" });
     const items = itemsPorOrden[o.id] || [];
     setFormItems(
       items.length > 0
         ? items.map((i) => ({
             key: `saved-${i.id}`,
-            insumoId: i.insumo_id != null ? String(i.insumo_id) : "",
             descripcion: i.descripcion || "",
             cantidad: i.cantidad != null ? String(i.cantidad) : "",
             unidad: i.unidad || "unid",
-            precio: i.precio_unitario != null ? String(i.precio_unitario) : "",
           }))
         : [emptyItem()]
     );
@@ -146,35 +124,33 @@ export default function OrdenesCompraPage() {
     setError(null);
 
     if (!form.proveedor.trim()) {
-      setError("El proveedor es obligatorio.");
+      setError("La ferretería (proveedor) es obligatoria.");
       return;
     }
     const itemsValidos = formItems
-      .map((i) => ({
-        insumoId: i.insumoId ? Number(i.insumoId) : null,
-        descripcion: i.descripcion.trim(),
-        cantidad: Number(i.cantidad),
-        unidad: i.unidad.trim() || "unid",
-        precio: Number(i.precio) || 0,
-      }))
+      .map((i) => ({ descripcion: i.descripcion.trim(), cantidad: Number(i.cantidad), unidad: i.unidad.trim() || "unid" }))
       .filter((i) => i.descripcion || i.cantidad > 0);
     if (itemsValidos.length === 0) {
-      setError("Agregá al menos un ítem con descripción.");
+      setError("Agregá al menos un artículo con descripción.");
       return;
     }
     for (const i of itemsValidos) {
       if (!i.descripcion) {
-        setError("Todos los ítems tienen que tener descripción.");
+        setError("Todos los artículos tienen que tener descripción.");
         return;
       }
       if (!i.cantidad || i.cantidad <= 0) {
-        setError("La cantidad de cada ítem tiene que ser mayor a 0.");
+        setError("La cantidad de cada artículo tiene que ser mayor a 0.");
         return;
       }
     }
 
     setEnviando(true);
-    const payload = { proveedor: form.proveedor.trim(), observaciones: form.observaciones.trim() || null };
+    const payload = {
+      proveedor: form.proveedor.trim(),
+      retirado_por: form.retiradoPor.trim() || null,
+      observaciones: form.observaciones.trim() || null,
+    };
     let ordenId = editandoId;
     let error;
     if (editandoId) {
@@ -194,14 +170,7 @@ export default function OrdenesCompraPage() {
 
     if (!error) {
       const { error: errItems } = await supabase.from("orden_compra_items").insert(
-        itemsValidos.map((i) => ({
-          orden_id: ordenId,
-          insumo_id: i.insumoId,
-          descripcion: i.descripcion,
-          cantidad: i.cantidad,
-          unidad: i.unidad,
-          precio_unitario: i.precio,
-        }))
+        itemsValidos.map((i) => ({ orden_id: ordenId, descripcion: i.descripcion, cantidad: i.cantidad, unidad: i.unidad }))
       );
       error = errItems;
     }
@@ -229,39 +198,6 @@ export default function OrdenesCompraPage() {
     cargar();
   }
 
-  async function recibirOrden(o) {
-    setError(null);
-    const items = itemsPorOrden[o.id] || [];
-    const vinculados = items.filter((i) => i.insumo_id != null);
-    setEnviando(true);
-    let errores = [];
-    for (const i of vinculados) {
-      const { data, error: err } = await supabase.rpc("registrar_movimiento_insumo", {
-        p_insumo_id: i.insumo_id,
-        p_tipo: "entrada",
-        p_cantidad: Number(i.cantidad),
-        p_producto_texto: null,
-        p_nota: `Recepción ${nro(o.numero) || ""} - ${o.proveedor || ""}`.trim(),
-        p_usuario_email: session?.user?.email || null,
-      });
-      const r = data?.[0];
-      if (err || !r?.ok) errores.push(`${i.descripcion}: ${err?.message || r?.mensaje}`);
-    }
-    if (errores.length > 0) {
-      setEnviando(false);
-      setError("No se pudo recibir completo. Revisá Movimientos. " + errores.join(" | "));
-      return;
-    }
-    const { error: errEst } = await supabase.from("ordenes_compra").update({ estado: "recibida" }).eq("id", o.id);
-    setEnviando(false);
-    if (errEst) {
-      setError(errEst.message);
-      return;
-    }
-    mostrarMensaje(`Orden recibida${vinculados.length > 0 ? ` · stock actualizado (${vinculados.length} ítem${vinculados.length !== 1 ? "s" : ""})` : ""}`);
-    cargar();
-  }
-
   async function eliminarOrden() {
     if (!confirmarEliminar) return;
     const { error } = await supabase.from("ordenes_compra").delete().eq("id", confirmarEliminar.id);
@@ -278,7 +214,7 @@ export default function OrdenesCompraPage() {
   function imprimirOrden(o) {
     setTarjeta(o);
     const tituloOriginal = document.title;
-    document.title = `OC-${o.numero != null ? nro(o.numero) : o.id}-${(o.proveedor || "sin-proveedor").replace(/[^a-zA-Z0-9 _-]/g, "").trim().replace(/\s+/g, "-")}`;
+    document.title = `OC-${o.numero != null ? nro(o.numero) : o.id}-${(o.proveedor || "ferreteria").replace(/[^a-zA-Z0-9 _-]/g, "").trim().replace(/\s+/g, "-")}`;
     function restaurarTitulo() {
       document.title = tituloOriginal;
       window.removeEventListener("afterprint", restaurarTitulo);
@@ -289,20 +225,16 @@ export default function OrdenesCompraPage() {
 
   async function exportarExcel() {
     const XLSX = await import("xlsx");
-    const filas = ordenes.map((o) => {
-      const items = itemsPorOrden[o.id] || [];
-      const total = items.reduce((a, i) => a + Number(i.cantidad || 0) * Number(i.precio_unitario || 0), 0);
-      return {
-        "N°": nro(o.numero) || "",
-        Fecha: new Date(o.fecha).toLocaleString("es-MX"),
-        Estado: ESTADO_STYLE[o.estado]?.label || o.estado,
-        Proveedor: o.proveedor || "",
-        Ítems: items.map((i) => `${i.descripcion} x${i.cantidad} ${i.unidad}`).join(" | "),
-        Total: total,
-        Observaciones: o.observaciones || "",
-        Usuario: o.usuario_email || "",
-      };
-    });
+    const filas = ordenes.map((o) => ({
+      "N°": nro(o.numero) || "",
+      Fecha: new Date(o.fecha).toLocaleString("es-MX"),
+      Estado: ESTADO_STYLE[o.estado]?.label || o.estado,
+      Ferretería: o.proveedor || "",
+      "Retirado por": o.retirado_por || "",
+      Artículos: (itemsPorOrden[o.id] || []).map((i) => `${i.descripcion} x${i.cantidad} ${i.unidad}`).join(" | "),
+      Observaciones: o.observaciones || "",
+      Usuario: o.usuario_email || "",
+    }));
     const hoja = XLSX.utils.json_to_sheet(filas);
     const libro = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(libro, hoja, "Ordenes");
@@ -311,9 +243,7 @@ export default function OrdenesCompraPage() {
 
   if (rol && !puedeAcceder) return null;
 
-  const totalForm = formItems.reduce((a, i) => a + (Number(i.cantidad) || 0) * (Number(i.precio) || 0), 0);
   const itemsTarjeta = tarjeta ? itemsPorOrden[tarjeta.id] || [] : [];
-  const totalTarjeta = itemsTarjeta.reduce((a, i) => a + Number(i.cantidad || 0) * Number(i.precio_unitario || 0), 0);
 
   return (
     <>
@@ -342,58 +272,46 @@ export default function OrdenesCompraPage() {
           )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
-            <Field label="Proveedor">
-              <input className={inputCls} value={form.proveedor} onChange={(e) => setForm({ ...form, proveedor: e.target.value })} placeholder="Ej. Aceros Sarmiento" />
+            <Field label="Ferretería">
+              <input className={inputCls} value={form.proveedor} onChange={(e) => setForm({ ...form, proveedor: e.target.value })} placeholder="Ej. Ferretería El Tornillo" />
             </Field>
-            <Field label="Observaciones (opcional)">
-              <input className={inputCls} value={form.observaciones} onChange={(e) => setForm({ ...form, observaciones: e.target.value })} placeholder="Ej. Entrega en planta" />
+            <Field label="Retira (quién va con la orden)">
+              <input className={inputCls} value={form.retiradoPor} onChange={(e) => setForm({ ...form, retiradoPor: e.target.value })} placeholder="Ej. Juan Pérez" />
             </Field>
           </div>
 
+          <Field label="Observaciones (opcional)">
+            <input className={inputCls} value={form.observaciones} onChange={(e) => setForm({ ...form, observaciones: e.target.value })} placeholder="Ej. Pasar antes del mediodía" />
+          </Field>
+
           <div className="border-t border-[#EFEBE0] pt-4 mt-2">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-xs uppercase tracking-wide text-[#6B6558]">Ítems ({formItems.length})</p>
+              <p className="text-xs uppercase tracking-wide text-[#6B6558]">Artículos a retirar ({formItems.length})</p>
               <button type="button" onClick={agregarItem} className="inline-flex items-center gap-1 text-sm text-[#3B5166] hover:underline">
-                <Plus size={14} /> Agregar ítem
+                <Plus size={14} /> Agregar artículo
               </button>
             </div>
             <ul className="space-y-2 mb-1">
               {formItems.map((it) => (
-                <li key={it.key} className="bg-[#F7F4EC] rounded-sm px-3 py-2">
-                  <label className="block mb-2">
-                    <span className="block text-[10px] uppercase tracking-wide text-[#8A8578] mb-1">Insumo de stock (opcional, para control y recepción)</span>
-                    <select className={inputCls + " !py-1.5"} value={it.insumoId} onChange={(e) => elegirInsumo(it.key, e.target.value)}>
-                      <option value="">— Ítem libre —</option>
-                      {insumos.map((i) => (
-                        <option key={i.id} value={i.id}>
-                          {i.nombre} ({i.unidad}) — {i.deposito} · stock: {i.stock}
-                        </option>
-                      ))}
-                    </select>
+                <li key={it.key} className="flex items-end gap-2 bg-[#F7F4EC] rounded-sm px-3 py-2">
+                  <label className="block flex-1 min-w-0">
+                    <span className="block text-[10px] uppercase tracking-wide text-[#8A8578] mb-1">Artículo</span>
+                    <input className={inputCls + " !py-1.5"} value={it.descripcion} onChange={(e) => cambiarItem(it.key, "descripcion", e.target.value)} placeholder="Ej. Tornillos 1/4 x 2" />
                   </label>
-                  <div className="flex items-end gap-2">
-                    <label className="block flex-1 min-w-0">
-                      <span className="block text-[10px] uppercase tracking-wide text-[#8A8578] mb-1">Descripción</span>
-                      <input className={inputCls + " !py-1.5"} value={it.descripcion} onChange={(e) => cambiarItem(it.key, "descripcion", e.target.value)} placeholder="Ej. Chapa 3mm 1.5x3m" />
-                    </label>
-                    <label className="block w-20 shrink-0">
-                      <span className="block text-[10px] uppercase tracking-wide text-[#8A8578] mb-1">Cant.</span>
-                      <input type="number" step="0.01" min="0" className={inputCls + " !py-1.5 text-center"} value={it.cantidad} onChange={(e) => cambiarItem(it.key, "cantidad", e.target.value)} />
-                    </label>
-                    <label className="block w-20 shrink-0">
-                      <span className="block text-[10px] uppercase tracking-wide text-[#8A8578] mb-1">Precio $</span>
-                      <input type="number" step="0.01" min="0" className={inputCls + " !py-1.5 text-center"} value={it.precio} onChange={(e) => cambiarItem(it.key, "precio", e.target.value)} placeholder="0" />
-                    </label>
-                    <button type="button" onClick={() => quitarItem(it.key)} className="text-[#C7522A] hover:text-red p-1.5 shrink-0" title="Quitar">
-                      <Trash2 size={15} />
-                    </button>
-                  </div>
+                  <label className="block w-20 shrink-0">
+                    <span className="block text-[10px] uppercase tracking-wide text-[#8A8578] mb-1">Cant.</span>
+                    <input type="number" step="0.01" min="0" className={inputCls + " !py-1.5 text-center"} value={it.cantidad} onChange={(e) => cambiarItem(it.key, "cantidad", e.target.value)} />
+                  </label>
+                  <label className="block w-20 shrink-0">
+                    <span className="block text-[10px] uppercase tracking-wide text-[#8A8578] mb-1">Unidad</span>
+                    <input className={inputCls + " !py-1.5 text-center"} value={it.unidad} onChange={(e) => cambiarItem(it.key, "unidad", e.target.value)} placeholder="unid" />
+                  </label>
+                  <button type="button" onClick={() => quitarItem(it.key)} className="text-[#C7522A] hover:text-red p-1.5 shrink-0" title="Quitar">
+                    <Trash2 size={15} />
+                  </button>
                 </li>
               ))}
             </ul>
-            {totalForm > 0 && (
-              <p className="text-right text-sm font-mono mt-2">Total estimado: <b>{pesos(totalForm)}</b></p>
-            )}
           </div>
 
           <button type="submit" disabled={enviando} className="w-full mt-2 bg-ink text-paper py-2.5 rounded-sm text-sm font-medium hover:bg-[#333731] disabled:opacity-60">
@@ -411,7 +329,6 @@ export default function OrdenesCompraPage() {
               ordenes.map((o) => {
                 const est = ESTADO_STYLE[o.estado] || ESTADO_STYLE.pendiente;
                 const items = itemsPorOrden[o.id] || [];
-                const total = items.reduce((a, i) => a + Number(i.cantidad || 0) * Number(i.precio_unitario || 0), 0);
                 return (
                   <div key={o.id} className="bg-white border border-line rounded-sm p-4">
                     <div className="flex flex-wrap items-center gap-1.5 mb-2">
@@ -423,23 +340,19 @@ export default function OrdenesCompraPage() {
                       </span>
                       <span className="font-mono text-xs text-[#6B6558] ml-auto">{new Date(o.fecha).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}</span>
                     </div>
-                    <div className="font-medium leading-snug">{o.proveedor || "Sin proveedor"}</div>
-                    <p className="text-xs text-[#6B6558] mt-1">{items.length} ítem(es){total > 0 ? ` · ${pesos(total)}` : ""}</p>
+                    <div className="font-medium leading-snug">{o.proveedor || "Sin ferretería"}</div>
+                    {o.retirado_por && <p className="text-xs text-[#6B6558] mt-0.5">Retira: {o.retirado_por}</p>}
+                    <p className="text-xs text-[#6B6558] mt-1">{items.length} artículo(s)</p>
                     <div className="flex items-center gap-2 mt-3 flex-wrap">
                       {o.estado === "pendiente" && (
-                        <button onClick={() => cambiarEstado(o, "aprobada")} className="flex items-center gap-1.5 px-3 py-2 border border-line rounded-sm text-sm font-medium text-ink">
-                          <Check size={15} /> Aprobar
-                        </button>
-                      )}
-                      {o.estado === "aprobada" && (
-                        <button onClick={() => recibirOrden(o)} disabled={enviando} className="flex items-center gap-1.5 px-3 py-2 border border-line rounded-sm text-sm font-medium text-ink disabled:opacity-60">
-                          <CheckCheck size={15} /> Recibir
-                        </button>
-                      )}
-                      {(o.estado === "pendiente" || o.estado === "aprobada") && (
-                        <button onClick={() => abrirEditar(o)} className="flex items-center gap-1.5 px-3 py-2 border border-line rounded-sm text-sm font-medium text-ink">
-                          <Pencil size={15} /> Editar
-                        </button>
+                        <>
+                          <button onClick={() => cambiarEstado(o, "retirada")} className="flex items-center gap-1.5 px-3 py-2 border border-line rounded-sm text-sm font-medium text-ink">
+                            <Check size={15} /> Marcar retirada
+                          </button>
+                          <button onClick={() => abrirEditar(o)} className="flex items-center gap-1.5 px-3 py-2 border border-line rounded-sm text-sm font-medium text-ink">
+                            <Pencil size={15} /> Editar
+                          </button>
+                        </>
                       )}
                       <button onClick={() => imprimirOrden(o)} className="flex items-center gap-1.5 px-3 py-2 border border-line rounded-sm text-sm font-medium text-ink">
                         <Printer size={15} /> Imprimir
@@ -462,9 +375,9 @@ export default function OrdenesCompraPage() {
                   <th className="px-4 py-3 font-medium">N°</th>
                   <th className="px-4 py-3 font-medium">Fecha</th>
                   <th className="px-4 py-3 font-medium">Estado</th>
-                  <th className="px-4 py-3 font-medium">Proveedor</th>
-                  <th className="px-4 py-3 font-medium">Ítems</th>
-                  <th className="px-4 py-3 font-medium text-right">Total</th>
+                  <th className="px-4 py-3 font-medium">Ferretería</th>
+                  <th className="px-4 py-3 font-medium">Retira</th>
+                  <th className="px-4 py-3 font-medium">Artículos</th>
                   <th className="px-4 py-3 font-medium text-right">Acciones</th>
                 </tr>
               </thead>
@@ -473,7 +386,6 @@ export default function OrdenesCompraPage() {
                 {!loading && ordenes.map((o, idx) => {
                   const est = ESTADO_STYLE[o.estado] || ESTADO_STYLE.pendiente;
                   const items = itemsPorOrden[o.id] || [];
-                  const total = items.reduce((a, i) => a + Number(i.cantidad || 0) * Number(i.precio_unitario || 0), 0);
                   return (
                     <tr key={o.id} className={`${idx % 2 === 1 ? "bg-[#F7F4EC]" : ""} ${idx !== ordenes.length - 1 ? "border-b border-[#EFEBE0]" : ""}`}>
                       <td className="px-4 py-3 font-mono whitespace-nowrap">{o.numero != null ? nro(o.numero) : "—"}</td>
@@ -484,26 +396,21 @@ export default function OrdenesCompraPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-[#4A463D] whitespace-nowrap">{o.proveedor || "—"}</td>
+                      <td className="px-4 py-3 text-[#4A463D] whitespace-nowrap">{o.retirado_por || "—"}</td>
                       <td className="px-4 py-3 text-[#4A463D] max-w-xs truncate">
                         {items.map((i) => `${i.descripcion} x${i.cantidad}`).join(" · ") || "—"}
                       </td>
-                      <td className="px-4 py-3 font-mono text-right whitespace-nowrap">{total > 0 ? pesos(total) : "—"}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-3">
                           {o.estado === "pendiente" && (
-                            <button onClick={() => cambiarEstado(o, "aprobada")} className="text-[#2E6F9E] hover:opacity-70" title="Aprobar">
-                              <Check size={15} />
-                            </button>
-                          )}
-                          {o.estado === "aprobada" && (
-                            <button onClick={() => recibirOrden(o)} disabled={enviando} className="text-[#3D5A2E] hover:opacity-70 disabled:opacity-40" title="Recibir y cargar a stock">
-                              <CheckCheck size={15} />
-                            </button>
-                          )}
-                          {(o.estado === "pendiente" || o.estado === "aprobada") && (
-                            <button onClick={() => abrirEditar(o)} className="text-[#4A4B4D] hover:opacity-70" title="Editar">
-                              <Pencil size={15} />
-                            </button>
+                            <>
+                              <button onClick={() => cambiarEstado(o, "retirada")} className="text-[#3D5A2E] hover:opacity-70" title="Marcar retirada">
+                                <Check size={15} />
+                              </button>
+                              <button onClick={() => abrirEditar(o)} className="text-[#4A4B4D] hover:opacity-70" title="Editar">
+                                <Pencil size={15} />
+                              </button>
+                            </>
                           )}
                           <button onClick={() => imprimirOrden(o)} className="text-[#4A4B4D] hover:opacity-70" title="Imprimir orden">
                             <Printer size={15} />
@@ -530,7 +437,7 @@ export default function OrdenesCompraPage() {
           <div className="bg-card w-full max-w-sm rounded-sm border border-line shadow-2xl p-5" onClick={(e) => e.stopPropagation()}>
             <h3 className="font-display text-xl font-semibold mb-2">Eliminar orden</h3>
             <p className="text-sm text-[#4A463D] mb-4">
-              ¿Eliminar la orden <b>{confirmarEliminar.numero != null ? nro(confirmarEliminar.numero) : ""}</b> de <b>{confirmarEliminar.proveedor || "sin proveedor"}</b>? También se quitan sus ítems.
+              ¿Eliminar la orden <b>{confirmarEliminar.numero != null ? nro(confirmarEliminar.numero) : ""}</b>? También se quitan sus artículos.
             </p>
             <div className="flex justify-end gap-2">
               <button onClick={() => setConfirmarEliminar(null)} className="px-4 py-2 border border-line rounded-sm text-sm text-ink hover:bg-[#F2EEE3]">
@@ -554,27 +461,22 @@ export default function OrdenesCompraPage() {
             <tbody>
               <tr><td className="pc-label">Fecha</td><td>{new Date(tarjeta.fecha).toLocaleString("es-MX", { dateStyle: "long", timeStyle: "short" })}</td></tr>
               <tr><td className="pc-label">Estado</td><td>{ESTADO_STYLE[tarjeta.estado]?.label || tarjeta.estado}</td></tr>
-              <tr><td className="pc-label">Proveedor</td><td>{tarjeta.proveedor || "—"}</td></tr>
+              <tr><td className="pc-label">Ferretería</td><td>{tarjeta.proveedor || "—"}</td></tr>
+              <tr><td className="pc-label">Retira</td><td>{tarjeta.retirado_por || "—"}</td></tr>
               {tarjeta.observaciones && <tr><td className="pc-label">Observaciones</td><td>{tarjeta.observaciones}</td></tr>}
               <tr>
-                <td className="pc-label">Ítems</td>
+                <td className="pc-label">Artículos</td>
                 <td>
                   {itemsTarjeta.length > 0 ? (
                     <table style={{ width: "100%", fontSize: "12px", borderCollapse: "collapse" }}>
-                      <thead><tr style={{ textAlign: "left", color: "#6B6558" }}><th style={{ padding: "4px 0" }}>Cant.</th><th>Descripción</th><th style={{ textAlign: "right" }}>P. unit.</th><th style={{ textAlign: "right" }}>Subtotal</th></tr></thead>
+                      <thead><tr style={{ textAlign: "left", color: "#6B6558" }}><th style={{ padding: "4px 0" }}>Cant.</th><th>Artículo</th></tr></thead>
                       <tbody>
                         {itemsTarjeta.map((i) => (
                           <tr key={i.id} style={{ borderTop: "1px solid #E4DFD3" }}>
                             <td style={{ padding: "4px 0" }}>{i.cantidad} {i.unidad}</td>
                             <td>{i.descripcion}</td>
-                            <td style={{ textAlign: "right" }}>{pesos(i.precio_unitario)}</td>
-                            <td style={{ textAlign: "right" }}>{pesos(Number(i.cantidad || 0) * Number(i.precio_unitario || 0))}</td>
                           </tr>
                         ))}
-                        <tr style={{ borderTop: "2px solid #1C1F1C", fontWeight: "bold" }}>
-                          <td colSpan="3" style={{ padding: "4px 0", textAlign: "right" }}>Total</td>
-                          <td style={{ textAlign: "right" }}>{pesos(totalTarjeta)}</td>
-                        </tr>
                       </tbody>
                     </table>
                   ) : "—"}
@@ -584,8 +486,8 @@ export default function OrdenesCompraPage() {
             </tbody>
           </table>
           <div style={{ display: "flex", gap: "32px", marginTop: "48px", fontSize: "12px", color: "#6B6558" }}>
-            <div style={{ flex: 1, borderTop: "1px solid #1C1F1C", paddingTop: "4px", textAlign: "center" }}>Firma autoriza</div>
-            <div style={{ flex: 1, borderTop: "1px solid #1C1F1C", paddingTop: "4px", textAlign: "center" }}>Firma proveedor</div>
+            <div style={{ flex: 1, borderTop: "1px solid #1C1F1C", paddingTop: "4px", textAlign: "center" }}>Firma quien retira</div>
+            <div style={{ flex: 1, borderTop: "1px solid #1C1F1C", paddingTop: "4px", textAlign: "center" }}>Firma ferretería</div>
           </div>
           <div className="pc-footer">Powered by Aresa</div>
         </div>
