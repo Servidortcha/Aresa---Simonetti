@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
 import { useAuth } from "../../../lib/AuthContext";
 import { Wrench, Download, Printer, Paperclip, Pencil, FileText, X } from "lucide-react";
+import { DocPrint, DocGrid, DocTabla, DocFila, DocNota } from "../../../components/DocPrint";
 
 const TIPOS = ["Corte Láser", "Tornería"];
 const emptyForm = {
@@ -528,6 +529,11 @@ export default function TrabajosPage() {
                           <input type="number" min="0" className={inputCls + " !py-1 !text-xs"} value={a.ancho_mm} onChange={(e) => setArchivosActuales((prev) => prev.map((x, i) => (i === idx ? { ...x, ancho_mm: e.target.value } : x)))} placeholder="mm" />
                         </label>
                       </div>
+                      {areaDeArchivo({ cantidad: a.cantidad, largo_mm: a.largo_mm || form.largo_mm, ancho_mm: a.ancho_mm || form.ancho_mm }, 0, 0) > 0 && (
+                        <p className="text-[11px] font-mono text-[#2E6F9E] mt-1">
+                          = {areaDeArchivo({ cantidad: a.cantidad, largo_mm: a.largo_mm || form.largo_mm, ancho_mm: a.ancho_mm || form.ancho_mm }, 0, 0).toFixed(3)} m² en este archivo
+                        </p>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -554,6 +560,11 @@ export default function TrabajosPage() {
                           <input type="number" min="0" className={inputCls + " !py-1 !text-xs"} value={item.ancho_mm} onChange={(e) => setArchivosSeleccionados((prev) => prev.map((x, i) => (i === idx ? { ...x, ancho_mm: e.target.value } : x)))} placeholder="mm" />
                         </label>
                       </div>
+                      {areaDeArchivo({ cantidad: item.cantidad, largo_mm: item.largo_mm || form.largo_mm, ancho_mm: item.ancho_mm || form.ancho_mm }, 0, 0) > 0 && (
+                        <p className="text-[11px] font-mono text-[#2E6F9E] mt-1">
+                          = {areaDeArchivo({ cantidad: item.cantidad, largo_mm: item.largo_mm || form.largo_mm, ancho_mm: item.ancho_mm || form.ancho_mm }, 0, 0).toFixed(3)} m² en este archivo
+                        </p>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -778,48 +789,48 @@ export default function TrabajosPage() {
       </div>
 
       {tarjeta && (
-        <div className="print-card hidden">
-          <div className="pc-header">
-            <div className="pc-empresa">Simonetti Montajes Industriales</div>
-            <div className="pc-tipo">{tarjeta.tipo}</div>
-          </div>
-          <table className="pc-tabla">
-            <tbody>
-              <tr><td className="pc-label">N°</td><td>{tarjeta.numero != null ? nro(tarjeta.numero) : "—"}</td></tr>
-              <tr><td className="pc-label">Fecha</td><td>{new Date(tarjeta.fecha).toLocaleString("es-MX", { dateStyle: "long", timeStyle: "short" })}</td></tr>
-              <tr><td className="pc-label">Estado</td><td>{tarjeta.confirmado ? "Confirmado" : "Pendiente"}</td></tr>
-              <tr><td className="pc-label">Cliente</td><td>{tarjeta.cliente || "—"}</td></tr>
-              <tr><td className="pc-label">Obra</td><td>{tarjeta.fabricacion_id ? (obraPorId[tarjeta.fabricacion_id]?.nombre || "—") : "—"}</td></tr>
-              <tr><td className="pc-label">Descripción</td><td>{tarjeta.descripcion || "—"}</td></tr>
-              <tr><td className="pc-label">Cantidad</td><td>{tarjeta.cantidad ?? "—"}</td></tr>
-              <tr>
-                <td className="pc-label">Duración</td>
-                <td>
-                  {tarjeta.tipo === "Corte Láser"
+        <DocPrint titulo={tarjeta.tipo} numero={tarjeta.numero != null ? nro(tarjeta.numero) : null}>
+          <DocGrid
+            datos={[
+              { label: "Fecha", valor: new Date(tarjeta.fecha).toLocaleString("es-MX", { dateStyle: "long", timeStyle: "short" }) },
+              { label: "Estado", valor: tarjeta.confirmado ? "Confirmado" : "Pendiente" },
+              { label: "Cliente", valor: tarjeta.cliente || "—" },
+              { label: "Obra", valor: tarjeta.fabricacion_id ? (obraPorId[tarjeta.fabricacion_id]?.nombre || "—") : "—" },
+              { label: "Cantidad", valor: tarjeta.cantidad ?? "—" },
+              {
+                label: "Duración",
+                valor:
+                  tarjeta.tipo === "Corte Láser"
                     ? (tarjeta.duracion_minutos != null ? `${tarjeta.duracion_minutos} min` : "—")
-                    : (tarjeta.duracion_horas != null ? `${tarjeta.duracion_horas} h` : "—")}
-                </td>
-              </tr>
-              {tarjeta.tipo === "Corte Láser" && (
-                <>
-                  {tarjeta.largo_mm != null && <tr><td className="pc-label">Largo</td><td>{tarjeta.largo_mm} mm</td></tr>}
-                  {tarjeta.ancho_mm != null && <tr><td className="pc-label">Ancho</td><td>{tarjeta.ancho_mm} mm</td></tr>}
-                  <tr><td className="pc-label">Área total</td><td>{tarjeta.metros_cuadrados != null ? `${Number(tarjeta.metros_cuadrados).toFixed(3)} m²` : "—"}</td></tr>
-                  {detalleCortes(tarjeta).some((d) => d.cantidad) && (
-                    <tr><td className="pc-label">Cortes por archivo</td><td>
-                      {detalleCortes(tarjeta).filter((d) => d.cantidad).map((d, i) => (
-                        <div key={i}>{d.nombre} x{d.cantidad}{d.largo && d.ancho ? ` (${d.largo}x${d.ancho}mm${d.area != null ? ` = ${d.area.toFixed(3)}m²` : ""})` : ""}</div>
-                      ))}
-                    </td></tr>
-                  )}
-                </>
-              )}
-              <tr><td className="pc-label">Material</td><td>{tarjeta.material || "—"}</td></tr>
-              <tr><td className="pc-label">Registrado por</td><td>{tarjeta.usuario_email || "—"}</td></tr>
-            </tbody>
-          </table>
-          <div className="pc-footer">Powered by Aresa</div>
-        </div>
+                    : (tarjeta.duracion_horas != null ? `${tarjeta.duracion_horas} h` : "—"),
+              },
+              { label: "Material", valor: tarjeta.material || "—" },
+              { label: "Registrado por", valor: tarjeta.usuario_email || "—" },
+            ]}
+          />
+          {tarjeta.descripcion && <DocNota label="Descripción" texto={tarjeta.descripcion} />}
+          {tarjeta.tipo === "Corte Láser" && detalleCortes(tarjeta).some((d) => d.cantidad) && (
+            <DocTabla head={[{ label: "Archivo" }, { label: "Cant." }, { label: "Medidas" }, { label: "m²", align: "right" }]}>
+              {detalleCortes(tarjeta).filter((d) => d.cantidad).map((d, i) => (
+                <DocFila
+                  key={i}
+                  zebra={i % 2 === 1}
+                  celdas={[
+                    { valor: d.nombre },
+                    { valor: `x${d.cantidad}` },
+                    { valor: d.largo && d.ancho ? `${d.largo}x${d.ancho}mm` : "—" },
+                    { valor: d.area != null ? `${d.area.toFixed(3)} m²` : "—", align: "right" },
+                  ]}
+                />
+              ))}
+            </DocTabla>
+          )}
+          {tarjeta.tipo === "Corte Láser" && tarjeta.metros_cuadrados != null && (
+            <p style={{ textAlign: "right", fontSize: 14, fontWeight: "bold" }}>
+              Área total: {Number(tarjeta.metros_cuadrados).toFixed(3)} m²
+            </p>
+          )}
+        </DocPrint>
       )}
 
       {archivosAbiertos && (

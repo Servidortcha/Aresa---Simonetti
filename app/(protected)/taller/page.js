@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
 import { useAuth } from "../../../lib/AuthContext";
 import { Hammer, Download, Paperclip, X, FileText, ClipboardList, Plus, Trash2, Pencil, Printer } from "lucide-react";
+import { DocPrint, DocGrid, DocNota } from "../../../components/DocPrint";
 
 const emptyForm = { cliente: "", cantidad: "", duracion_horas: "", cantidad_personas: "", descripcion_materiales: "" };
 
@@ -841,75 +842,68 @@ export default function TallerPage() {
       )}
 
       {tarjeta && (
-        <div className="print-card hidden">
-          <div className="pc-header">
-            <div className="pc-empresa">Simonetti Montajes Industriales</div>
-            <div className="pc-tipo">Taller</div>
+        <DocPrint titulo="Taller" numero={tarjeta.numero != null ? nro(tarjeta.numero) : null}>
+          <DocGrid
+            datos={[
+              { label: "Fecha", valor: new Date(tarjeta.fecha).toLocaleString("es-MX", { dateStyle: "long", timeStyle: "short" }) },
+              { label: "Cliente", valor: tarjeta.cliente || "—" },
+              { label: "Cantidad", valor: tarjeta.cantidad ?? "—" },
+              { label: "Duración", valor: tarjeta.duracion_horas != null ? `${tarjeta.duracion_horas} h` : "—" },
+              { label: "Personas", valor: tarjeta.cantidad_personas ?? "—" },
+              { label: "Registrado por", valor: tarjeta.usuario_email || "—" },
+            ]}
+          />
+          <DocNota label="Materiales" texto={tarjeta.descripcion_materiales} />
+          <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 1, color: "#8A8578", marginBottom: 6 }}>
+            Trabajos anexados
           </div>
-          <table className="pc-tabla">
-            <tbody>
-              <tr><td className="pc-label">N°</td><td>{tarjeta.numero != null ? nro(tarjeta.numero) : "—"}</td></tr>
-              <tr><td className="pc-label">Fecha</td><td>{new Date(tarjeta.fecha).toLocaleString("es-MX", { dateStyle: "long", timeStyle: "short" })}</td></tr>
-              <tr><td className="pc-label">Cliente</td><td>{tarjeta.cliente || "—"}</td></tr>
-              <tr><td className="pc-label">Cantidad</td><td>{tarjeta.cantidad ?? "—"}</td></tr>
-              <tr><td className="pc-label">Duración</td><td>{tarjeta.duracion_horas != null ? `${tarjeta.duracion_horas} h` : "—"}</td></tr>
-              <tr><td className="pc-label">Personas</td><td>{tarjeta.cantidad_personas ?? "—"}</td></tr>
-              <tr><td className="pc-label">Materiales</td><td style={{ whiteSpace: "pre-wrap" }}>{tarjeta.descripcion_materiales || "—"}</td></tr>
-              <tr>
-                <td className="pc-label">Trabajos anexados</td>
-                <td>
-                  {(itemsPorTrabajo[tarjeta.id] || []).length > 0 ? (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                      {(itemsPorTrabajo[tarjeta.id] || []).map((i, idx) => {
-                        const t = i.tipo === "trabajo" ? trabajos.find((x) => x.id === i.trabajo_ref) : null;
-                        if (i.tipo === "trabajo" && t) {
-                          return (
-                            <div key={idx} style={{ border: "1px solid #E4DFD3", borderRadius: 6, padding: "8px 10px" }}>
-                              <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                                <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 15, color: "#1C1F1C" }}>{t.tipo}</span>
-                                {t.numero != null && (
-                                  <span style={{ fontSize: 11, color: "#8A8578" }}>{nro(t.numero)}</span>
-                                )}
-                              </div>
-                              <div style={{ color: "#6B6558", fontSize: 12 }}>{t.cliente || "—"} · {t.confirmado ? "Confirmado" : "Pendiente"}</div>
-                              <div style={{ fontSize: 13, marginTop: 4 }}>{t.descripcion || "—"}</div>
-                              <div style={{ fontSize: 12, marginTop: 4 }}>
-                                Cantidad: {t.cantidad ?? "—"} · Duración:{" "}
-                                {t.tipo === "Corte Láser"
-                                  ? (t.duracion_minutos != null ? `${t.duracion_minutos} min` : "—")
-                                  : (t.duracion_horas != null ? `${t.duracion_horas} h` : "—")}
-                              </div>
-                              {t.tipo === "Corte Láser" && (
-                                <div style={{ fontSize: 12, marginTop: 2 }}>
-                                  Largo: {t.largo_mm != null ? `${t.largo_mm} mm` : "—"} · Ancho: {t.ancho_mm != null ? `${t.ancho_mm} mm` : "—"} · Área:{" "}
-                                  {t.metros_cuadrados != null ? `${Number(t.metros_cuadrados).toFixed(3)} m²` : "—"}
-                                </div>
-                              )}
-                              <div style={{ fontSize: 12, marginTop: 2 }}>Material: {t.material || "—"}</div>
-                            </div>
-                          );
-                        }
-                        return (
-                          <div key={idx} style={{ border: "1px solid #E4DFD3", borderRadius: 6, padding: "8px 10px" }}>
-                            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 15, color: "#1C1F1C" }}>Ítem externo</div>
-                            <div style={{ fontSize: 13, marginTop: 4 }}>
-                              {i.descripcion}{i.cantidad ? ` (x${i.cantidad})` : ""}{i.duracion_horas ? ` · ${i.duracion_horas} h` : ""}
-                            </div>
-                            <div style={{ fontSize: 13, marginTop: 2, fontWeight: 600 }}>
-                              {i.valor_pesos != null ? `$ ${Number(i.valor_pesos).toLocaleString("es-AR")}` : "—"}
-                            </div>
-                          </div>
-                        );
-                      })}
+          {(itemsPorTrabajo[tarjeta.id] || []).length > 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 8 }}>
+              {(itemsPorTrabajo[tarjeta.id] || []).map((i, idx) => {
+                const t = i.tipo === "trabajo" ? trabajos.find((x) => x.id === i.trabajo_ref) : null;
+                if (i.tipo === "trabajo" && t) {
+                  return (
+                    <div key={idx} style={{ border: "1px solid #E4DFD3", borderRadius: 6, padding: "10px 12px", background: "#FDFBF5" }}>
+                      <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                        <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 16, color: "#1C1F1C" }}>{t.tipo}</span>
+                        {t.numero != null && (
+                          <span style={{ fontSize: 11, color: "#8A8578" }}>{nro(t.numero)}</span>
+                        )}
+                      </div>
+                      <div style={{ color: "#6B6558", fontSize: 12 }}>{t.cliente || "—"} · {t.confirmado ? "Confirmado" : "Pendiente"}</div>
+                      <div style={{ fontSize: 13, marginTop: 4 }}>{t.descripcion || "—"}</div>
+                      <div style={{ fontSize: 12, marginTop: 4 }}>
+                        Cantidad: {t.cantidad ?? "—"} · Duración:{" "}
+                        {t.tipo === "Corte Láser"
+                          ? (t.duracion_minutos != null ? `${t.duracion_minutos} min` : "—")
+                          : (t.duracion_horas != null ? `${t.duracion_horas} h` : "—")}
+                      </div>
+                      {t.tipo === "Corte Láser" && t.metros_cuadrados != null && (
+                        <div style={{ fontSize: 12, marginTop: 2 }}>
+                          Área: {Number(t.metros_cuadrados).toFixed(3)} m²
+                        </div>
+                      )}
+                      <div style={{ fontSize: 12, marginTop: 2 }}>Material: {t.material || "—"}</div>
                     </div>
-                  ) : "—"}
-                </td>
-              </tr>
-              <tr><td className="pc-label">Registrado por</td><td>{tarjeta.usuario_email || "—"}</td></tr>
-            </tbody>
-          </table>
-          <div className="pc-footer">Powered by Aresa</div>
-        </div>
+                  );
+                }
+                return (
+                  <div key={idx} style={{ border: "1px solid #E4DFD3", borderRadius: 6, padding: "10px 12px", background: "#FDFBF5" }}>
+                    <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 16, color: "#1C1F1C" }}>Ítem externo</div>
+                    <div style={{ fontSize: 13, marginTop: 4 }}>
+                      {i.descripcion}{i.cantidad ? ` (x${i.cantidad})` : ""}{i.duracion_horas ? ` · ${i.duracion_horas} h` : ""}
+                    </div>
+                    <div style={{ fontSize: 13, marginTop: 2, fontWeight: 600 }}>
+                      {i.valor_pesos != null ? `$ ${Number(i.valor_pesos).toLocaleString("es-AR")}` : "—"}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p style={{ fontSize: 13, color: "#8A8578", marginBottom: 8 }}>Sin trabajos anexados</p>
+          )}
+        </DocPrint>
       )}
     </>
   );

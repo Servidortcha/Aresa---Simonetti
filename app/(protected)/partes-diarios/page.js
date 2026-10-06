@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
 import { useAuth } from "../../../lib/AuthContext";
 import { ClipboardList, Plus, X, Pencil, Trash2, Paperclip, FileText, Printer, ShieldCheck, ChevronDown } from "lucide-react";
+import { DocPrint, DocGrid, DocTabla, DocFila, DocNota } from "../../../components/DocPrint";
 
 const inputCls = "w-full px-3 py-2 bg-white border border-line rounded-sm text-sm text-ink focus:outline-none focus:ring-2 focus:ring-green focus:border-transparent";
 const textareaCls = inputCls + " resize-y min-h-[90px]";
@@ -703,12 +704,8 @@ export default function PartesDiariosPage() {
       )}
 
       {imprimirParte && (
-        <div className="print-card hidden">
+        <DocPrint titulo={`Parte diario — ${nombreFrente[imprimirParte.frente_id] || "Frente"}`} numero={null}>
           <style>{`@media print { .pc-no-print { display: none !important; } }`}</style>
-          <div className="pc-header">
-            <div className="pc-empresa">Simonetti Montajes Industriales</div>
-            <div className="pc-tipo">Parte diario — {nombreFrente[imprimirParte.frente_id] || "Frente"}</div>
-          </div>
           <div className="pc-no-print" style={{marginBottom: '12px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap'}}>
             <label style={{display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', cursor: 'pointer'}}>
               <input type="checkbox" checked={imprimirConImagenes} onChange={(e) => setImprimirConImagenes(e.target.checked)} />
@@ -719,43 +716,44 @@ export default function PartesDiariosPage() {
               <button onClick={() => setImprimirParte(null)} style={{padding: '6px 12px', border: '1px solid #D8D2C4', borderRadius: '4px', fontSize: '12px', background: 'white', cursor: 'pointer'}}>Cerrar</button>
             </div>
           </div>
-          <table className="pc-tabla">
-            <tbody>
-              <tr><td className="pc-label">Frente</td><td>{nombreFrente[imprimirParte.frente_id] || "—"}</td></tr>
-              <tr><td className="pc-label">Fecha</td><td>{formatFecha(imprimirParte.fecha)}</td></tr>
-              {imprimirParte.numero_parte_bunge && <tr><td className="pc-label">N° Bunge</td><td>{imprimirParte.numero_parte_bunge}</td></tr>}
-              <tr><td className="pc-label">Tareas</td><td style={{whiteSpace: 'pre-wrap'}}>{imprimirParte.tareas || "—"}</td></tr>
-              {imprimirParte.novedades && <tr><td className="pc-label">Novedades</td><td style={{whiteSpace: 'pre-wrap'}}>{imprimirParte.novedades}</td></tr>}
-              {imprimirParte.horas_por_persona && imprimirParte.horas_por_persona.length > 0 && (
-                <tr><td className="pc-label">Horas</td><td>
-                  {imprimirParte.horas_por_persona.map((h, i) => (
-                    <div key={i} style={{display: 'flex', justifyContent: 'space-between', fontSize: '12px', borderBottom: i < imprimirParte.horas_por_persona.length -1 ? '1px solid #E4DFD3' : 'none', padding: '2px 0'}}>
-                      <span>{h.nombre}</span><span>{h.horas} h</span>
-                    </div>
+          <DocGrid
+            datos={[
+              { label: "Frente", valor: nombreFrente[imprimirParte.frente_id] || "—" },
+              { label: "Fecha", valor: formatFecha(imprimirParte.fecha) },
+              ...(imprimirParte.numero_parte_bunge ? [{ label: "N° Bunge", valor: imprimirParte.numero_parte_bunge }] : []),
+              { label: "Registrado por", valor: imprimirParte.usuario_email || "—" },
+            ]}
+          />
+          <DocNota label="Tareas realizadas" texto={imprimirParte.tareas} />
+          <DocNota label="Novedades" texto={imprimirParte.novedades} />
+          {imprimirParte.horas_por_persona && imprimirParte.horas_por_persona.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 1, color: "#8A8578", marginBottom: 6 }}>Horas por persona</div>
+              <DocTabla head={[{ label: "Persona" }, { label: "Horas", align: "right" }]}>
+                {imprimirParte.horas_por_persona.map((h, i) => (
+                  <DocFila key={i} zebra={i % 2 === 1} celdas={[{ valor: h.nombre }, { valor: `${h.horas} h`, align: "right" }]} />
+                ))}
+              </DocTabla>
+            </div>
+          )}
+          {imprimirConImagenes && imprimirParte.archivos && imprimirParte.archivos.length > 0 && (
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 1, color: "#8A8578", marginBottom: 6 }}>Imágenes</div>
+              <div style={{display: 'flex', flexWrap: 'wrap', gap: '8px'}}>
+                {imprimirParte.archivos.filter(a => a.type?.startsWith("image/")).map((a, i) => (
+                  <img key={i} src={a.url} alt={a.name} style={{width: '110px', height: '80px', objectFit: 'cover', border: '1px solid #E4DFD3', borderRadius: '4px'}} />
+                ))}
+              </div>
+              {imprimirParte.archivos.filter(a => !a.type?.startsWith("image/")).length > 0 && (
+                <div style={{marginTop: '8px', fontSize: '12px'}}>
+                  {imprimirParte.archivos.filter(a => !a.type?.startsWith("image/")).map((a, i) => (
+                    <div key={i}>{a.name}</div>
                   ))}
-                </td></tr>
+                </div>
               )}
-              {imprimirConImagenes && imprimirParte.archivos && imprimirParte.archivos.length > 0 && (
-                <tr><td className="pc-label">Imágenes</td><td>
-                  <div style={{display: 'flex', flexWrap: 'wrap', gap: '8px'}}>
-                    {imprimirParte.archivos.filter(a => a.type?.startsWith("image/")).map((a, i) => (
-                      <img key={i} src={a.url} alt={a.name} style={{width: '110px', height: '80px', objectFit: 'cover', border: '1px solid #E4DFD3', borderRadius: '4px'}} />
-                    ))}
-                  </div>
-                  {imprimirParte.archivos.filter(a => !a.type?.startsWith("image/")).length > 0 && (
-                    <div style={{marginTop: '8px', fontSize: '12px'}}>
-                      {imprimirParte.archivos.filter(a => !a.type?.startsWith("image/")).map((a, i) => (
-                        <div key={i}>{a.name}</div>
-                      ))}
-                    </div>
-                  )}
-                </td></tr>
-              )}
-              <tr><td className="pc-label">Registrado por</td><td>{imprimirParte.usuario_email || "—"}</td></tr>
-            </tbody>
-          </table>
-          <div className="pc-footer">Powered by Aresa</div>
-        </div>
+            </div>
+          )}
+        </DocPrint>
       )}
     </>
   );

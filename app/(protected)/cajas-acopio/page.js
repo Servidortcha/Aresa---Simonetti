@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
 import { useAuth } from "../../../lib/AuthContext";
 import { AlertTriangle, Search, Plus, X, Pencil, Trash2, Download, Upload, ClipboardCheck, FileSpreadsheet, Wrench, Printer } from "lucide-react";
+import { DocPrint, DocGrid, DocTabla, DocFila } from "../../../components/DocPrint";
 
 const CATS = ["Químicos", "Empaques", "Metales", "Textiles", "Seguridad", "Insumos para Fabricación", "Herramientas"];
 const UNITS = ["kg", "L", "unid", "m"];
@@ -845,36 +846,32 @@ export default function StockPage() {
       )}
 
       {cajaParaImprimir && (
-        <div className="print-card hidden">
-          <div className="pc-header">
-            <div className="pc-empresa">Simonetti Montajes Industriales</div>
-            <div className="pc-tipo">Caja de Acopio — Gral. Villegas</div>
+        <DocPrint titulo="Caja de Acopio" numero={null}>
+          <DocGrid
+            datos={[
+              { label: "Caja", valor: cajaParaImprimir.nombre },
+              { label: "Depósito", valor: cajaParaImprimir.deposito || "Gral. Villegas" },
+              { label: "Categoría", valor: cajaParaImprimir.categoria || "—" },
+              { label: "Stock", valor: `${cajaParaImprimir.stock} ${cajaParaImprimir.unidad} (mín. ${cajaParaImprimir.minimo})` },
+            ]}
+          />
+          <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 1, color: "#8A8578", marginBottom: 6 }}>
+            Herramientas ({(herramientasPorCaja[cajaParaImprimir.id] || []).length})
           </div>
-          <table className="pc-tabla">
-            <tbody>
-              <tr><td className="pc-label">Caja</td><td>{cajaParaImprimir.nombre}</td></tr>
-              <tr><td className="pc-label">Categoría</td><td>{cajaParaImprimir.categoria || "—"}</td></tr>
-              <tr><td className="pc-label">Stock</td><td>{cajaParaImprimir.stock} {cajaParaImprimir.unidad} (mín. {cajaParaImprimir.minimo})</td></tr>
-              <tr><td className="pc-label">Depósito</td><td>{cajaParaImprimir.deposito}</td></tr>
-              <tr>
-                <td className="pc-label">Herramientas</td>
-                <td>
-                  {(herramientasPorCaja[cajaParaImprimir.id] || []).length > 0 ? (
-                    <table style={{ width: "100%", fontSize: "12px", borderCollapse: "collapse" }}>
-                      <thead><tr style={{ textAlign: "left", color: "#6B6558" }}><th style={{ padding: "4px 0" }}>Cant.</th><th>Herramienta</th></tr></thead>
-                      <tbody>
-                        {(herramientasPorCaja[cajaParaImprimir.id] || []).map((h) => (
-                          <tr key={h.id} style={{ borderTop: "1px solid #E4DFD3" }}><td style={{ padding: "4px 0" }}>{h.cantidad} {h.unidad}</td><td>{h.herramienta}</td></tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  ) : "Sin herramientas cargadas"}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          <div className="pc-footer">Powered by Aresa</div>
-        </div>
+          {(herramientasPorCaja[cajaParaImprimir.id] || []).length > 0 ? (
+            <DocTabla head={[{ label: "Cant." }, { label: "Herramienta" }]}>
+              {(herramientasPorCaja[cajaParaImprimir.id] || []).map((h, idx) => (
+                <DocFila
+                  key={h.id}
+                  zebra={idx % 2 === 1}
+                  celdas={[{ valor: `${h.cantidad} ${h.unidad}` }, { valor: h.herramienta }]}
+                />
+              ))}
+            </DocTabla>
+          ) : (
+            <p style={{ fontSize: 13, color: "#8A8578", marginBottom: 8 }}>Sin herramientas cargadas</p>
+          )}
+        </DocPrint>
       )}
     </>
   );
