@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
 import { useAuth } from "../../../lib/AuthContext";
 import { Truck, Download, Printer, Pencil, Trash2, Plus, X, FileText } from "lucide-react";
+import { DocPrint, DocGrid, DocTabla, DocFila, DocNota, DocFirmas } from "../../../components/DocPrint";
 
 const emptyForm = { cliente: "", destino: "", transporte: "", chofer: "", observaciones: "" };
 const emptyItem = () => ({ key: Date.now() + Math.random(), descripcion: "", cantidad: "", unidad: "unid" });
@@ -412,46 +413,29 @@ export default function RemitosPage() {
       )}
 
       {tarjeta && (
-        <div className="print-card hidden">
-          <div className="pc-header">
-            <div className="pc-empresa">Simonetti Montajes Industriales</div>
-            <div className="pc-tipo">Remito {tarjeta.numero != null ? nro(tarjeta.numero) : ""}</div>
-          </div>
-          <table className="pc-tabla">
-            <tbody>
-              <tr><td className="pc-label">Fecha</td><td>{new Date(tarjeta.fecha).toLocaleString("es-MX", { dateStyle: "long", timeStyle: "short" })}</td></tr>
-              <tr><td className="pc-label">Cliente</td><td>{tarjeta.cliente || "—"}</td></tr>
-              <tr><td className="pc-label">Destino</td><td>{tarjeta.destino || "—"}</td></tr>
-              <tr><td className="pc-label">Transporte</td><td>{tarjeta.transporte || "—"}</td></tr>
-              <tr><td className="pc-label">Chofer</td><td>{tarjeta.chofer || "—"}</td></tr>
-              {tarjeta.observaciones && <tr><td className="pc-label">Observaciones</td><td>{tarjeta.observaciones}</td></tr>}
-              <tr>
-                <td className="pc-label">Ítems</td>
-                <td>
-                  {itemsTarjeta.length > 0 ? (
-                    <table style={{ width: "100%", fontSize: "12px", borderCollapse: "collapse" }}>
-                      <thead><tr style={{ textAlign: "left", color: "#6B6558" }}><th style={{ padding: "4px 0" }}>Cant.</th><th>Descripción</th></tr></thead>
-                      <tbody>
-                        {itemsTarjeta.map((i) => (
-                          <tr key={i.id} style={{ borderTop: "1px solid #E4DFD3" }}>
-                            <td style={{ padding: "4px 0" }}>{i.cantidad} {i.unidad}</td>
-                            <td>{i.descripcion}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  ) : "—"}
-                </td>
-              </tr>
-              <tr><td className="pc-label">Registrado por</td><td>{tarjeta.usuario_email || "—"}</td></tr>
-            </tbody>
-          </table>
-          <div style={{ display: "flex", gap: "32px", marginTop: "48px", fontSize: "12px", color: "#6B6558" }}>
-            <div style={{ flex: 1, borderTop: "1px solid #1C1F1C", paddingTop: "4px", textAlign: "center" }}>Firma receptor</div>
-            <div style={{ flex: 1, borderTop: "1px solid #1C1F1C", paddingTop: "4px", textAlign: "center" }}>Aclaración</div>
-          </div>
-          <div className="pc-footer">Powered by Aresa</div>
-        </div>
+        <DocPrint titulo="Remito" numero={tarjeta.numero != null ? nro(tarjeta.numero) : null}>
+          <DocGrid
+            datos={[
+              { label: "Fecha", valor: new Date(tarjeta.fecha).toLocaleString("es-MX", { dateStyle: "long", timeStyle: "short" }) },
+              { label: "Registrado por", valor: tarjeta.usuario_email || "—" },
+              { label: "Cliente", valor: tarjeta.cliente || "—" },
+              { label: "Destino", valor: tarjeta.destino || "—" },
+              { label: "Transporte", valor: tarjeta.transporte || "—" },
+              { label: "Chofer", valor: tarjeta.chofer || "—" },
+            ]}
+          />
+          <DocNota label="Observaciones" texto={tarjeta.observaciones} />
+          <DocTabla head={[{ label: "Cant." }, { label: "Descripción" }]}>
+            {itemsTarjeta.map((i, idx) => (
+              <DocFila
+                key={i.id}
+                zebra={idx % 2 === 1}
+                celdas={[{ valor: `${i.cantidad} ${i.unidad}` }, { valor: i.descripcion }]}
+              />
+            ))}
+          </DocTabla>
+          <DocFirmas izq="Firma receptor" der="Aclaración" />
+        </DocPrint>
       )}
     </>
   );
