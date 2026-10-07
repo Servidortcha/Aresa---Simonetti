@@ -411,9 +411,11 @@ export default function OrdenesCompraPage() {
                       <button onClick={() => imprimirOrden(o)} className="flex items-center gap-1.5 px-3 py-2 border border-line rounded-sm text-sm font-medium text-ink">
                         <Printer size={15} /> Imprimir
                       </button>
-                      <button onClick={() => setConfirmarEliminar(o)} className="flex items-center gap-1.5 px-3 py-2 border border-line rounded-sm text-sm font-medium text-[#C7522A]">
-                        <Trash2 size={15} /> Eliminar
-                      </button>
+                      {o.estado !== "retirada" && (
+                        <button onClick={() => setConfirmarEliminar(o)} className="flex items-center gap-1.5 px-3 py-2 border border-line rounded-sm text-sm font-medium text-[#C7522A]">
+                          <Trash2 size={15} /> Eliminar
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -471,9 +473,11 @@ export default function OrdenesCompraPage() {
                           <button onClick={() => imprimirOrden(o)} className="text-[#4A4B4D] hover:opacity-70" title="Imprimir orden">
                             <Printer size={15} />
                           </button>
-                          <button onClick={() => setConfirmarEliminar(o)} className="text-[#C7522A] hover:text-red" title="Eliminar">
-                            <Trash2 size={15} />
-                          </button>
+                          {o.estado !== "retirada" && (
+                            <button onClick={() => setConfirmarEliminar(o)} className="text-[#C7522A] hover:text-red" title="Eliminar">
+                              <Trash2 size={15} />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
