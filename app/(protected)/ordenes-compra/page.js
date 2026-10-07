@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
 import { useAuth } from "../../../lib/AuthContext";
-import { ShoppingCart, Download, Printer, Pencil, Trash2, Plus, X, Check } from "lucide-react";
+import { ShoppingCart, Download, Printer, Pencil, Trash2, Plus, X, Check, Search } from "lucide-react";
 import { DocPrint, DocGrid, DocTabla, DocFila, DocNota, DocFirmas } from "../../../components/DocPrint";
 
 const emptyForm = { proveedor: "", retiradoPor: "", observaciones: "" };
@@ -47,6 +47,9 @@ export default function OrdenesCompraPage() {
   const [enviando, setEnviando] = useState(false);
   const [confirmarEliminar, setConfirmarEliminar] = useState(null);
   const [tarjeta, setTarjeta] = useState(null);
+  const [ocQuery, setOcQuery] = useState("");
+  const [ocEstado, setOcEstado] = useState("todos");
+  const [ocMes, setOcMes] = useState("");
 
   async function cargar() {
     setLoading(true);
@@ -224,9 +227,32 @@ export default function OrdenesCompraPage() {
     setTimeout(() => window.print(), 100);
   }
 
+  const ordenesFiltradas = ordenes.filter((o) => {
+    if (ocQuery) {
+      const q = ocQuery.toLowerCase();
+      const prov = (o.proveedor || "").toLowerCase();
+      const ret = (o.retirado_por || "").toLowerCase();
+      const obs = (o.observaciones || "").toLowerCase();
+      const items = (itemsPorOrden[o.id] || []).map((i) => i.descripcion || "").join(" ").toLowerCase();
+      const num = o.numero != null ? nro(o.numero).toLowerCase() : "";
+      if (!(prov.includes(q) || ret.includes(q) || obs.includes(q) || items.includes(q) || num.includes(q))) return false;
+    }
+    if (ocEstado !== "todos" && o.estado !== ocEstado) return false;
+    if (ocMes && (o.fecha || "").slice(0, 7) !== ocMes) return false;
+    return true;
+  });
+
+  const hayFiltrosOc = ocQuery || ocEstado !== "todos" || ocMes;
+
+  function limpiarFiltrosOc() {
+    setOcQuery("");
+    setOcEstado("todos");
+    setOcMes("");
+  }
+
   async function exportarExcel() {
     const XLSX = await import("xlsx");
-    const filas = ordenes.map((o) => ({
+    const filas = ordenesFiltradas.map((o) => ({
       "N°": nro(o.numero) || "",
       Fecha: new Date(o.fecha).toLocaleString("es-MX"),
       Estado: ESTADO_STYLE[o.estado]?.label || o.estado,
@@ -239,7 +265,7 @@ export default function OrdenesCompraPage() {
     const hoja = XLSX.utils.json_to_sheet(filas);
     const libro = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(libro, hoja, "Ordenes");
-    XLSX.writeFile(libro, `ordenes-compra-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    XLSX.writeFile(libro, `ordenes-compra-${ocMes || new Date().toISOString().slice(0, 10)}.xlsx`);
   }
 
   if (rol && !puedeAcceder) return null;
@@ -323,11 +349,37 @@ export default function OrdenesCompraPage() {
         <div className="w-full">
           <h2 className="font-display text-xl font-semibold text-ink mb-3">Historial de órdenes</h2>
 
+          <div className="flex items-center gap-3 mb-4 flex-wrap">
+            <div className="flex items-center gap-2 bg-white border border-line rounded-sm px-3 py-2 w-full sm:max-w-xs">
+              <Search size={15} color="#6B6558" />
+              <input value={ocQuery} onChange={(e) => setOcQuery(e.target.value)} placeholder="Buscar ferretería, artículo, N°..." className="flex-1 text-sm outline-none" />
+            </div>
+            <select value={ocEstado} onChange={(e) => setOcEstado(e.target.value)} className="bg-white border border-line rounded-sm px-3 py-2 text-sm text-ink">
+              <option value="todos">Todos los estados</option>
+              <option value="pendiente">Pendientes</option>
+              <option value="retirada">Retiradas</option>
+              <option value="cancelada">Canceladas</option>
+            </select>
+            <label className="flex items-center gap-1.5 text-xs text-[#6B6558]">
+              Mes
+              <input type="month" value={ocMes} onChange={(e) => setOcMes(e.target.value)} className="bg-white border border-line rounded-sm px-2 py-2 text-sm text-ink" />
+            </label>
+            {hayFiltrosOc && (
+              <button onClick={limpiarFiltrosOc} className="inline-flex items-center gap-1 text-sm text-[#3B5166] hover:underline">
+                <X size={14} /> Limpiar filtros
+              </button>
+            )}
+          </div>
+
+          {!loading && hayFiltrosOc && (
+            <p className="text-xs text-[#8A8578] mb-3">{ordenesFiltradas.length} orden{ordenesFiltradas.length !== 1 ? "es" : ""} encontrada{ordenesFiltradas.length !== 1 ? "s" : ""} — el Excel exporta esta selección</p>
+          )}
+
           {/* Móvil: tarjetas */}
           <div className="sm:hidden space-y-3">
             {loading && <p className="text-center text-sm text-[#8A8578] py-8">Cargando...</p>}
             {!loading &&
-              ordenes.map((o) => {
+              ordenesFiltradas.map((o) => {
                 const est = ESTADO_STYLE[o.estado] || ESTADO_STYLE.pendiente;
                 const items = itemsPorOrden[o.id] || [];
                 return (
@@ -366,7 +418,7 @@ export default function OrdenesCompraPage() {
                   </div>
                 );
               })}
-            {!loading && ordenes.length === 0 && <p className="text-center text-sm text-[#8A8578] py-8">Aún no hay órdenes</p>}
+            {!loading && ordenesFiltradas.length === 0 && <p className="text-center text-sm text-[#8A8578] py-8">{hayFiltrosOc ? "No hay órdenes que coincidan con los filtros" : "Aún no hay órdenes"}</p>}
           </div>
 
           {/* Desktop: tabla */}
@@ -386,11 +438,11 @@ export default function OrdenesCompraPage() {
               </thead>
               <tbody>
                 {loading && <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-[#8A8578]">Cargando...</td></tr>}
-                {!loading && ordenes.map((o, idx) => {
+                {!loading && ordenesFiltradas.map((o, idx) => {
                   const est = ESTADO_STYLE[o.estado] || ESTADO_STYLE.pendiente;
                   const items = itemsPorOrden[o.id] || [];
                   return (
-                    <tr key={o.id} className={`${idx % 2 === 1 ? "bg-[#F7F4EC]" : ""} ${idx !== ordenes.length - 1 ? "border-b border-[#EFEBE0]" : ""}`}>
+                    <tr key={o.id} className={`${idx % 2 === 1 ? "bg-[#F7F4EC]" : ""} ${idx !== ordenesFiltradas.length - 1 ? "border-b border-[#EFEBE0]" : ""}`}>
                       <td className="px-4 py-3 font-mono whitespace-nowrap">{o.numero != null ? nro(o.numero) : "—"}</td>
                       <td className="px-4 py-3 text-[#6B6558] font-mono whitespace-nowrap">{new Date(o.fecha).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}</td>
                       <td className="px-4 py-3">
@@ -427,8 +479,8 @@ export default function OrdenesCompraPage() {
                     </tr>
                   );
                 })}
-                {!loading && ordenes.length === 0 && (
-                  <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-[#8A8578]">Aún no hay órdenes</td></tr>
+                {!loading && ordenesFiltradas.length === 0 && (
+                  <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-[#8A8578]">{hayFiltrosOc ? "No hay órdenes que coincidan con los filtros" : "Aún no hay órdenes"}</td></tr>
                 )}
               </tbody>
             </table>
