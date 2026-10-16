@@ -1,9 +1,12 @@
 "use client";
 
+import { createPortal } from "react-dom";
+
 const EXACT = { WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" };
 
 export function DocPrint({ titulo, numero, children }) {
-  return (
+  if (typeof document === "undefined") return null;
+  return createPortal(
     <div className="print-card hidden" style={{ maxWidth: 680, padding: 0, color: "#1C1F1C" }}>
       <div style={{ background: "#F4791E", color: "#fff", padding: "18px 24px", borderRadius: "8px 8px 0 0", ...EXACT }}>
         <div style={{ fontSize: 11, letterSpacing: 2, textTransform: "uppercase", opacity: 0.9 }}>

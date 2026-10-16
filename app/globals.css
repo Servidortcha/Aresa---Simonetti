@@ -83,16 +83,14 @@ body {
 }
 
 @media print {
-  body * {
-    visibility: hidden;
+  @page {
+    margin: 12mm;
   }
-  .print-card, .print-card * {
-    visibility: visible;
+  body > *:not(.print-card):not(:has(#printArea)) {
+    display: none !important;
   }
   .print-card {
     display: block !important;
-    position: absolute;
-    top: 0;
-    left: 0;
+    position: static;
   }
 }
