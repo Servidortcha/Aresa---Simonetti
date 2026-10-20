@@ -268,12 +268,47 @@ export default function IngresoEgresoPage() {
                 </div>
               </Field>
               <Field label="Insumo">
-                <select className={inputCls} value={item.insumoId} onChange={(e) => setItem({ ...item, insumoId: e.target.value })}>
-                  <option value="">— Seleccionar insumo —</option>
-                  {insumosVisibles.map((i) => (
-                    <option key={i.id} value={i.id}>{i.nombre}{rol === "taller_stock" ? "" : ` (stock: ${i.stock} ${i.unidad})`}</option>
-                  ))}
-                </select>
+                {insumosVisibles.some((i) => i.imagen_url) ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-64 overflow-y-auto border border-line rounded-sm p-2">
+                    <button
+                      type="button"
+                      onClick={() => setItem({ ...item, insumoId: "" })}
+                      className="col-span-2 sm:col-span-3 text-left text-xs text-[#8A8578] hover:text-ink py-0.5"
+                    >
+                      — Sin seleccionar —
+                    </button>
+                    {insumosVisibles.map((i) => (
+                      <button
+                        type="button"
+                        key={i.id}
+                        onClick={() => setItem({ ...item, insumoId: i.id })}
+                        className="flex items-center gap-2 text-left rounded-sm border p-1.5 transition-colors"
+                        style={{
+                          borderColor: item.insumoId === i.id ? "#F4791E" : "#EFEBE0",
+                          background: item.insumoId === i.id ? "#FDF6EE" : "white",
+                        }}
+                      >
+                        {i.imagen_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={i.imagen_url} alt={i.nombre} className="h-9 w-9 rounded-sm object-cover border border-line shrink-0" />
+                        ) : (
+                          <span className="h-9 w-9 rounded-sm bg-[#F7F4EC] border border-[#EFEBE0] shrink-0" />
+                        )}
+                        <span className="min-w-0">
+                          <span className="block text-xs leading-tight truncate">{i.nombre}</span>
+                          <span className="block text-[10px] text-[#8A8578]">{rol === "taller_stock" ? "" : `stock ${i.stock} ${i.unidad}`}</span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <select className={inputCls} value={item.insumoId} onChange={(e) => setItem({ ...item, insumoId: e.target.value })}>
+                    <option value="">— Seleccionar insumo —</option>
+                    {insumosVisibles.map((i) => (
+                      <option key={i.id} value={i.id}>{i.nombre}{rol === "taller_stock" ? "" : ` (stock: ${i.stock} ${i.unidad})`}</option>
+                    ))}
+                  </select>
+                )}
               </Field>
             </div>
 

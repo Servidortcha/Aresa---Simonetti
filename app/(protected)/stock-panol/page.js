@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
 import { useAuth } from "../../../lib/AuthContext";
 import { AlertTriangle, Search, Plus, X, Pencil, Trash2, Download } from "lucide-react";
+import { FotoInsumo, nombreSeguro } from "../../../components/FotoInsumo";
 
 const CATS = ["Químicos", "Empaques", "Metales", "Textiles", "Seguridad", "Insumos para Fabricación"];
 const UNITS = ["kg", "L", "unid", "m"];
@@ -51,6 +52,37 @@ export default function Stock2Page() {
   const [enviando, setEnviando] = useState(false);
   const [archiving, setArchiving] = useState(null);
   const [verArchivados, setVerArchivados] = useState(false);
+
+  async function subirImagen(insumoId, file, nombre) {
+    setError(null);
+    const nombreBase = nombreSeguro(nombre);
+    const path = `${insumoId}-${Date.now()}-${nombreBase}.jpg`;
+    const { error: uploadError } = await supabase.storage.from("imagenes-insumos").upload(path, file, { contentType: "image/jpeg" });
+    if (uploadError) {
+      setError("Error al subir la foto: " + uploadError.message);
+      return;
+    }
+    const { data: pub } = supabase.storage.from("imagenes-insumos").getPublicUrl(path);
+    const { error: errUpd } = await supabase
+      .from("insumos")
+      .update({ imagen_url: pub.publicUrl, imagen_actualizado: new Date().toISOString() })
+      .eq("id", insumoId);
+    if (errUpd) {
+      setError(errUpd.message);
+      return;
+    }
+    loadInsumos();
+  }
+
+  async function quitarImagen(insumoId) {
+    setError(null);
+    const { error } = await supabase.from("insumos").update({ imagen_url: null }).eq("id", insumoId);
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    loadInsumos();
+  }
 
   async function loadInsumos() {
     setLoading(true);
@@ -265,9 +297,19 @@ export default function Stock2Page() {
           filtered.map((i) => (
             <div key={i.id} className="bg-white border border-line rounded-sm p-4">
               <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="font-medium leading-snug">{i.nombre}</div>
-                  <div className="text-xs text-[#6B6558] mt-0.5">{i.categoria}</div>
+                <div className="flex items-start gap-2 min-w-0">
+                  <FotoInsumo
+                    insumoId={i.id}
+                    nombre={i.nombre}
+                    imagenUrl={i.imagen_url}
+                    onImagen={subirImagen}
+                    onQuitar={quitarImagen}
+                    puedeEditar={!soloLectura}
+                  />
+                  <div className="min-w-0">
+                    <div className="font-medium leading-snug">{i.nombre}</div>
+                    <div className="text-xs text-[#6B6558] mt-0.5">{i.categoria}</div>
+                  </div>
                 </div>
                 {!soloLectura && (
                   <div className="flex items-center gap-2 shrink-0">
@@ -312,7 +354,17 @@ export default function Stock2Page() {
             {!loading && filtered.map((i, idx) => (
               <tr key={i.id} className={`${idx % 2 === 1 ? "bg-[#F7F4EC]" : ""} ${idx !== filtered.length - 1 ? "border-b border-[#EFEBE0]" : ""}`}>
                 <td className="px-4 py-3">
-                  <div className="font-medium">{i.nombre}</div>
+                  <div className="flex items-center gap-2">
+                    <FotoInsumo
+                      insumoId={i.id}
+                      nombre={i.nombre}
+                      imagenUrl={i.imagen_url}
+                      onImagen={subirImagen}
+                      onQuitar={quitarImagen}
+                      puedeEditar={!soloLectura}
+                    />
+                    <span className="font-medium">{i.nombre}</span>
+                  </div>
                 </td>
                 <td className="px-4 py-3 text-[#4A463D]">{i.categoria}</td>
                 <td className="px-4 py-3 font-mono">
