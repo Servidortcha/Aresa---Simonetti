@@ -160,6 +160,7 @@ export default function Stock2Page() {
     const filas = filtered.map((i) => ({
       Insumo: i.nombre,
       Categoría: i.categoria,
+      Talle: i.talle || "",
       Unidad: i.unidad,
       Stock: i.stock,
       "Stock mínimo": i.minimo,
