@@ -17,6 +17,7 @@ function requiredRoles(pathname) {
   if (/^\/partes-diarios(\/|$)/.test(pathname)) return ["admin", "encargado", "supervision", "subadmin"];
   if (/^\/stock(\/|$)/.test(pathname)) return ["admin", "taller_stock", "subadmin"];
   if (/^\/cajas-acopio(\/|$)/.test(pathname)) return ["admin", "encargado", "subadmin"];
+  if (/^\/ropa(\/|$)/.test(pathname)) return ["admin", "subadmin"];
   if (/^\/trabajos(\/|$)/.test(pathname)) return ["admin", "taller_stock", "subadmin"];
   if (/^\/nesting(\/|$)/.test(pathname)) return ["admin", "taller_stock", "subadmin"];
   if (/^\/admin(\/|$)/.test(pathname)) return ["admin"];
