@@ -8,8 +8,8 @@ import { AlertTriangle, Search, Plus, X, Pencil, Trash2, Download, Printer, Chec
 import { FotoInsumo, nombreSeguro } from "../../../components/FotoInsumo";
 import { DocPrint, DocGrid, DocNota } from "../../../components/DocPrint";
 
-const CATS = ["Químicos", "Empaques", "Metales", "Textiles", "Seguridad", "Insumos para Fabricación"];
 const ROPA_CATS = ["Pantalon", "Camisa", "Buzo"];
+const CATS = ["Químicos", "Empaques", "Metales", "Textiles", "Seguridad", "Insumos para Fabricación", ...ROPA_CATS];
 const TALLES = {
   Pantalon: ["40", "42", "44", "46", "48", "50", "52", "54", "56"],
   Camisa: ["S", "M", "L", "XL", "XXL", "3XL"],
