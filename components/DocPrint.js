@@ -38,7 +38,8 @@ export function DocPrint({ titulo, numero, children }) {
           Simonetti Montajes Industriales · Powered by Aresa
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
