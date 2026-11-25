@@ -137,16 +137,34 @@ export default function Stock2Page() {
   const categorias = useMemo(() => ["Todas", ...new Set(insumos.map((i) => i.categoria).filter(Boolean))], [insumos]);
   const nombres = useMemo(() => [...new Set(insumos.map((i) => i.nombre).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es")), [insumos]);
 
-  const filtered = useMemo(
-    () =>
-      insumos
-        .filter((i) => (verArchivados ? i.activo === false : i.activo !== false))
-        .filter((i) => i.nombre.toLowerCase().includes(query.toLowerCase()) || (i.categoria || "").toLowerCase().includes(query.toLowerCase()) || (i.talle || "").toLowerCase().includes(query.toLowerCase()))
-        .filter((i) => catFilter === "Todas" || i.categoria === catFilter)
-        .filter((i) => nombreFilter === "todos" || i.nombre === nombreFilter)
-        .filter((i) => (verRopa === "todas" ? true : verRopa === "ropa" ? i.es_ropa : !i.es_ropa)),
-    [insumos, query, catFilter, verArchivados, nombreFilter, verRopa]
-  );
+  const filtered = useMemo(() => {
+    const ordenCategoria = (cat) => {
+      const idx = CATS.indexOf(cat);
+      return idx === -1 ? CATS.length : idx;
+    };
+    const ordenTalle = (cat, talle) => {
+      if (!talle) return -1;
+      const idx = (TALLES[cat] || []).indexOf(talle);
+      return idx === -1 ? 999 : idx;
+    };
+
+    return insumos
+      .filter((i) => (verArchivados ? i.activo === false : i.activo !== false))
+      .filter((i) => i.nombre.toLowerCase().includes(query.toLowerCase()) || (i.categoria || "").toLowerCase().includes(query.toLowerCase()) || (i.talle || "").toLowerCase().includes(query.toLowerCase()))
+      .filter((i) => catFilter === "Todas" || i.categoria === catFilter)
+      .filter((i) => nombreFilter === "todos" || i.nombre === nombreFilter)
+      .filter((i) => (verRopa === "todas" ? true : verRopa === "ropa" ? i.es_ropa : !i.es_ropa))
+      .sort((a, b) => {
+        const catA = a.categoria || "";
+        const catB = b.categoria || "";
+        const difCat = ordenCategoria(catA) - ordenCategoria(catB);
+        if (difCat !== 0) return difCat;
+        if (catA !== catB) return catA.localeCompare(catB, "es");
+        const difTalle = ordenTalle(catA, a.talle) - ordenTalle(catB, b.talle);
+        if (difTalle !== 0) return difTalle;
+        return (a.nombre || "").localeCompare(b.nombre || "", "es");
+      });
+  }, [insumos, query, catFilter, verArchivados, nombreFilter, verRopa]);
   const lowCount = insumos.filter((i) => i.activo !== false && i.stock < i.minimo).length;
 
   const entregasFiltradas = useMemo(() => {

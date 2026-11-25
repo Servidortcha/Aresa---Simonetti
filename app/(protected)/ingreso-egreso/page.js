@@ -7,6 +7,11 @@ import { ArrowRightLeft, ArrowDownCircle, ArrowUpCircle, CheckCircle2, History, 
 
 const inputCls = "w-full px-3 py-2 bg-white border border-line rounded-sm text-sm text-ink focus:outline-none focus:ring-2 focus:ring-green focus:border-transparent";
 
+function etiquetaInsumo(i) {
+  const categoria = [i.categoria, i.talle ? `Talle ${i.talle}` : null].filter(Boolean).join(" · ");
+  return categoria ? `${categoria} — ${i.nombre}` : i.nombre;
+}
+
 const itemVacio = () => ({ key: Date.now() + Math.random(), insumoId: "", tipo: "entrada", cantidad: "", producto: "", nota: "", fabricacionId: "" });
 
 function Field({ label, children }) {
@@ -295,6 +300,11 @@ export default function IngresoEgresoPage() {
                           <span className="h-9 w-9 rounded-sm bg-[#F7F4EC] border border-[#EFEBE0] shrink-0" />
                         )}
                         <span className="min-w-0">
+                          {(i.categoria || i.talle) && (
+                            <span className="block text-[10px] leading-tight text-[#8A8578] truncate">
+                              {i.categoria}{i.talle ? `${i.categoria ? " · " : ""}Talle ${i.talle}` : ""}
+                            </span>
+                          )}
                           <span className="block text-xs leading-tight truncate">{i.nombre}</span>
                           <span className="block text-[10px] text-[#8A8578]">{rol === "taller_stock" ? "" : `stock ${i.stock} ${i.unidad}`}</span>
                         </span>
@@ -305,7 +315,7 @@ export default function IngresoEgresoPage() {
                   <select className={inputCls} value={item.insumoId} onChange={(e) => setItem({ ...item, insumoId: e.target.value })}>
                     <option value="">— Seleccionar insumo —</option>
                     {insumosVisibles.map((i) => (
-                      <option key={i.id} value={i.id}>{i.nombre}{rol === "taller_stock" ? "" : ` (stock: ${i.stock} ${i.unidad})`}</option>
+                      <option key={i.id} value={i.id}>{etiquetaInsumo(i)}{rol === "taller_stock" ? "" : ` (stock: ${i.stock} ${i.unidad})`}</option>
                     ))}
                   </select>
                 )}
@@ -374,7 +384,7 @@ export default function IngresoEgresoPage() {
                 return (
                   <li key={l.key} className="flex items-center justify-between gap-3 bg-[#F7F4EC] rounded-sm px-3 py-2.5 text-sm">
                     <div className="min-w-0">
-                      <div className="font-medium text-[#4A463D] truncate">{insumo?.nombre || "—"}</div>
+                      <div className="font-medium text-[#4A463D] truncate">{insumo ? etiquetaInsumo(insumo) : "—"}</div>
                       <div className="text-[10px] uppercase tracking-wide text-[#8A8578]">
                         <span style={{ color: l.tipo === "entrada" ? "#4B7355" : "#C7522A" }}>
                           {l.tipo === "entrada" ? "Ingreso" : "Egreso"}
