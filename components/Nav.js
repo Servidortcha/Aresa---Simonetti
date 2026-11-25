@@ -42,6 +42,7 @@ const GROUPS = [
       { href: "/precios", label: "Precios", roles: ["admin", "subadmin"] },
       { href: "/remitos", label: "Remitos", roles: ["admin", "subadmin", "compras"] },
       { href: "/ordenes-compra", label: "Órdenes de compra", roles: ["admin", "subadmin", "compras"] },
+      { href: "/pagos", label: "Facturas y pagos", roles: ["admin", "subadmin", "compras"] },
     ],
   },
   {
