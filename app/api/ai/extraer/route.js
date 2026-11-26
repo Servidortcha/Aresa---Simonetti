@@ -9,6 +9,25 @@ const ROLES_PERMITIDOS = ["admin", "subadmin", "compras"];
 const MAX_BYTES = 4 * 1024 * 1024;
 const MIME_PERMITIDOS = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
 
+// Google retira modelos cada tanto (por ejemplo, gemini-2.5-flash quedó
+// bloqueado para claves nuevas en noviembre de 2026). Para no depender de un
+// nombre fijo, si el modelo configurado no existe se consulta la lista real de
+// modelos disponibles y se elige el mejor "flash" que acepte generateContent.
+const MODELO_POR_DEFECTO = "gemini-3.8-flash";
+const MODELOS_PREFERIDOS = [
+  "gemini-3.8-flash",
+  "gemini-3.7-flash",
+  "gemini-3.6-flash",
+  "gemini-3.5-flash",
+  "gemini-3.5-flash-lite",
+  "gemini-3.1-flash-lite",
+  "gemini-2.5-flash",
+  "gemini-2.5-flash-lite",
+];
+const EXCLUIR_MODELO = /(preview|exp|tts|live|image|audio|embedding|computer-use|robotics|omni|nano)/i;
+
+let modeloResuelto = null;
+
 const PROMPT_FACTURA = `Sos un asistente contable experto en comprobantes argentinos.
 Analizá la imagen o PDF adjunto y extraé los datos de esta FACTURA DE PROVEEDOR.
 
@@ -189,13 +208,61 @@ async function autenticar(request) {
   return { user };
 }
 
-async function llamarGemini({ base64, mime, prompt }) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  const modelo = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+function puntajeModelo(nombre) {
+  const m = String(nombre).match(/(\d+)(?:\.(\d+))?/);
+  if (!m) return 0;
+  return Number(m[1]) + Number(m[2] || 0) / 10;
+}
+
+async function listarModelos(apiKey) {
+  try {
+    const res = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000",
+      { headers: { "x-goog-api-key": apiKey }, cache: "no-store" }
+    );
+    if (!res.ok) return [];
+    const json = await res.json().catch(() => null);
+    return (json?.models || [])
+      .filter((m) => (m.supportedGenerationMethods || []).includes("generateContent"))
+      .map((m) => String(m.name || "").replace(/^models\//, ""))
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function elegirModelo(disponibles) {
+  for (const preferido of MODELOS_PREFERIDOS) {
+    if (disponibles.includes(preferido)) return preferido;
+  }
+  const flash = disponibles
+    .filter((n) => /flash/i.test(n) && !EXCLUIR_MODELO.test(n))
+    .sort((a, b) => puntajeModelo(b) - puntajeModelo(a));
+  if (flash.length) return flash[0];
+  const cualquiera = disponibles
+    .filter((n) => !EXCLUIR_MODELO.test(n))
+    .sort((a, b) => puntajeModelo(b) - puntajeModelo(a));
+  return cualquiera[0] || null;
+}
+
+async function pedirGemini({ apiKey, modelo, base64, mime, prompt, conConfig }) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 50000);
 
   try {
+    const body = {
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { text: prompt },
+            { inline_data: { mime_type: mime, data: base64 } },
+          ],
+        },
+      ],
+    };
+    if (conConfig) body.generationConfig = { responseMimeType: "application/json" };
+
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelo)}:generateContent`,
       {
@@ -204,26 +271,61 @@ async function llamarGemini({ base64, mime, prompt }) {
           "Content-Type": "application/json",
           "x-goog-api-key": apiKey,
         },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: "user",
-              parts: [
-                { text: prompt },
-                { inline_data: { mime_type: mime, data: base64 } },
-              ],
-            },
-          ],
-          generationConfig: {
-            temperature: 0.1,
-            responseMimeType: "application/json",
-          },
-        }),
+        body: JSON.stringify(body),
         signal: controller.signal,
       }
     );
 
     const json = await res.json().catch(() => null);
+    return { res, json };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function llamarGemini({ base64, mime, prompt }) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("Falta GEMINI_API_KEY en el servidor.");
+
+  try {
+    let modelo = modeloResuelto || process.env.GEMINI_MODEL || MODELO_POR_DEFECTO;
+    let { res, json } = await pedirGemini({
+      apiKey,
+      modelo,
+      base64,
+      mime,
+      prompt,
+      conConfig: true,
+    });
+
+    // Los modelos Gemini 3 ignoran o rechazan algunos parámetros de
+    // generationConfig: si el error lo menciona, reintentamos sin ellos.
+    if (res.status === 400) {
+      const msg = json?.error?.message || "";
+      if (/generationconfig|temperature|top_?p|top_?k|response_?mime/i.test(msg)) {
+        ({ res, json } = await pedirGemini({ apiKey, modelo, base64, mime, prompt, conConfig: false }));
+      }
+    }
+
+    // Modelo inexistente o retirado: buscamos uno disponible y reintentamos.
+    if (res.status === 404) {
+      const disponibles = await listarModelos(apiKey);
+      const alternativo = elegirModelo(disponibles);
+      if (alternativo && alternativo !== modelo) {
+        modelo = alternativo;
+        ({ res, json } = await pedirGemini({ apiKey, modelo, base64, mime, prompt, conConfig: true }));
+        if (res.status === 400) {
+          ({ res, json } = await pedirGemini({ apiKey, modelo, base64, mime, prompt, conConfig: false }));
+        }
+      }
+      if (res.status === 404) {
+        throw new Error(
+          "Ningún modelo de Gemini respondió. Modelos disponibles: " +
+            (disponibles.slice(0, 8).join(", ") || "no se pudieron consultar") +
+            ". Configurá GEMINI_MODEL con uno de ellos."
+        );
+      }
+    }
 
     if (!res.ok) {
       const mensaje = json?.error?.message || `Error ${res.status}`;
@@ -232,9 +334,6 @@ async function llamarGemini({ base64, mime, prompt }) {
       }
       if (res.status === 429) {
         throw new Error("Se superó el límite de uso de Gemini. Probá de nuevo en unos minutos.");
-      }
-      if (res.status === 404) {
-        throw new Error(`El modelo de IA "${modelo}" no está disponible. Revisá GEMINI_MODEL.`);
       }
       throw new Error("Gemini no pudo procesar el archivo: " + mensaje);
     }
@@ -249,14 +348,13 @@ async function llamarGemini({ base64, mime, prompt }) {
       throw new Error("La IA no devolvió datos legibles. Probá con una foto más clara.");
     }
 
-    return parsearJson(textoRespuesta);
+    modeloResuelto = modelo;
+    return { datos: parsearJson(textoRespuesta), modelo };
   } catch (err) {
     if (err.name === "AbortError") {
       throw new Error("La lectura con IA tardó demasiado. Probá de nuevo.");
     }
     throw err;
-  } finally {
-    clearTimeout(timeout);
   }
 }
 
@@ -264,7 +362,7 @@ export async function GET() {
   return NextResponse.json({
     disponible: Boolean(process.env.GEMINI_API_KEY),
     proveedor: "gemini",
-    modelo: process.env.GEMINI_MODEL || "gemini-2.5-flash",
+    modelo: modeloResuelto || process.env.GEMINI_MODEL || MODELO_POR_DEFECTO,
   });
 }
 
@@ -309,11 +407,12 @@ export async function POST(request) {
     const base64 = buffer.toString("base64");
     const prompt = tipo === "pago" ? PROMPT_PAGO : PROMPT_FACTURA;
 
-    const datos = await llamarGemini({ base64, mime, prompt });
+    const { datos, modelo } = await llamarGemini({ base64, mime, prompt });
 
     return NextResponse.json({
       ok: true,
       tipo,
+      modelo,
       datos: normalizarDatos(datos, tipo),
     });
   } catch (err) {
