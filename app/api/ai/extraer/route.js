@@ -231,6 +231,18 @@ async function listarModelos(apiKey) {
   }
 }
 
+let cacheModelos = { at: 0, lista: [] };
+
+async function modelosDisponibles(apiKey, forzar = false) {
+  const ahora = Date.now();
+  if (!forzar && cacheModelos.lista.length && ahora - cacheModelos.at < 60 * 60 * 1000) {
+    return cacheModelos.lista;
+  }
+  const lista = await listarModelos(apiKey);
+  if (lista.length) cacheModelos = { at: ahora, lista };
+  return lista;
+}
+
 function elegirModelo(disponibles) {
   for (const preferido of MODELOS_PREFERIDOS) {
     if (disponibles.includes(preferido)) return preferido;
@@ -283,73 +295,94 @@ async function pedirGemini({ apiKey, modelo, base64, mime, prompt, conConfig }) 
   }
 }
 
+async function intentarModelo({ apiKey, modelo, base64, mime, prompt }) {
+  let { res, json } = await pedirGemini({ apiKey, modelo, base64, mime, prompt, conConfig: true });
+
+  // Los modelos Gemini 3 ignoran o rechazan algunos parámetros de
+  // generationConfig: si el error lo menciona, reintentamos sin ellos.
+  if (res.status === 400) {
+    const msg = json?.error?.message || "";
+    if (/generationconfig|temperature|top_?p|top_?k|response_?mime/i.test(msg)) {
+      ({ res, json } = await pedirGemini({ apiKey, modelo, base64, mime, prompt, conConfig: false }));
+    }
+  }
+
+  return { res, json };
+}
+
 async function llamarGemini({ base64, mime, prompt }) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("Falta GEMINI_API_KEY en el servidor.");
 
+  const inicial = modeloResuelto || process.env.GEMINI_MODEL || MODELO_POR_DEFECTO;
+  const probados = [];
+  let disponibles = null;
+  let forzarLista = false;
+  let ultimoError = null;
+
   try {
-    let modelo = modeloResuelto || process.env.GEMINI_MODEL || MODELO_POR_DEFECTO;
-    let { res, json } = await pedirGemini({
-      apiKey,
-      modelo,
-      base64,
-      mime,
-      prompt,
-      conConfig: true,
-    });
-
-    // Los modelos Gemini 3 ignoran o rechazan algunos parámetros de
-    // generationConfig: si el error lo menciona, reintentamos sin ellos.
-    if (res.status === 400) {
-      const msg = json?.error?.message || "";
-      if (/generationconfig|temperature|top_?p|top_?k|response_?mime/i.test(msg)) {
-        ({ res, json } = await pedirGemini({ apiKey, modelo, base64, mime, prompt, conConfig: false }));
+    // Hasta 3 intentos: si el modelo no existe (404) o está saturado (5xx),
+    // se prueba automáticamente con otro modelo habilitado de la cuenta.
+    for (let intento = 0; intento < 3; intento++) {
+      let modelo;
+      if (intento === 0) {
+        modelo = inicial;
+      } else {
+        disponibles = await modelosDisponibles(apiKey, forzarLista);
+        forzarLista = false;
+        modelo =
+          elegirModelo(disponibles.filter((m) => !probados.includes(m))) ||
+          MODELOS_PREFERIDOS.find((m) => !probados.includes(m)) ||
+          null;
+        if (!modelo) break;
       }
-    }
+      probados.push(modelo);
 
-    // Modelo inexistente o retirado: buscamos uno disponible y reintentamos.
-    if (res.status === 404) {
-      const disponibles = await listarModelos(apiKey);
-      const alternativo = elegirModelo(disponibles);
-      if (alternativo && alternativo !== modelo) {
-        modelo = alternativo;
-        ({ res, json } = await pedirGemini({ apiKey, modelo, base64, mime, prompt, conConfig: true }));
-        if (res.status === 400) {
-          ({ res, json } = await pedirGemini({ apiKey, modelo, base64, mime, prompt, conConfig: false }));
+      const { res, json } = await intentarModelo({ apiKey, modelo, base64, mime, prompt });
+
+      if (res.ok) {
+        const textoRespuesta =
+          json?.candidates?.[0]?.content?.parts
+            ?.map((p) => p.text)
+            .filter(Boolean)
+            .join("\n") || "";
+
+        if (!textoRespuesta) {
+          throw new Error("La IA no devolvió datos legibles. Probá con una foto más clara.");
         }
-      }
-      if (res.status === 404) {
-        throw new Error(
-          "Ningún modelo de Gemini respondió. Modelos disponibles: " +
-            (disponibles.slice(0, 8).join(", ") || "no se pudieron consultar") +
-            ". Configurá GEMINI_MODEL con uno de ellos."
-        );
-      }
-    }
 
-    if (!res.ok) {
+        modeloResuelto = modelo;
+        return { datos: parsearJson(textoRespuesta), modelo };
+      }
+
       const mensaje = json?.error?.message || `Error ${res.status}`;
+
       if (res.status === 401 || res.status === 403) {
         throw new Error("La clave de Gemini no es válida o no tiene permisos.");
       }
+      if (res.status === 404) {
+        forzarLista = true;
+        ultimoError = new Error(
+          "Ningún modelo de Gemini respondió. Modelos disponibles: " +
+            ((disponibles || []).slice(0, 8).join(", ") || "no se pudieron consultar") +
+            "."
+        );
+        continue;
+      }
       if (res.status === 429) {
-        throw new Error("Se superó el límite de uso de Gemini. Probá de nuevo en unos minutos.");
+        ultimoError = new Error("Se superó el límite de uso de Gemini. Probá de nuevo en unos minutos.");
+        continue;
+      }
+      if (res.status >= 500) {
+        ultimoError = new Error(
+          "El modelo de IA está saturado en este momento. Probá de nuevo en unos segundos."
+        );
+        continue;
       }
       throw new Error("Gemini no pudo procesar el archivo: " + mensaje);
     }
 
-    const textoRespuesta =
-      json?.candidates?.[0]?.content?.parts
-        ?.map((p) => p.text)
-        .filter(Boolean)
-        .join("\n") || "";
-
-    if (!textoRespuesta) {
-      throw new Error("La IA no devolvió datos legibles. Probá con una foto más clara.");
-    }
-
-    modeloResuelto = modelo;
-    return { datos: parsearJson(textoRespuesta), modelo };
+    throw ultimoError || new Error("No se pudo obtener respuesta de la IA. Probá de nuevo en unos segundos.");
   } catch (err) {
     if (err.name === "AbortError") {
       throw new Error("La lectura con IA tardó demasiado. Probá de nuevo.");
