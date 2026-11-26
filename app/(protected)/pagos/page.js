@@ -307,6 +307,11 @@ export default function PagosPage() {
     [pagoFacturaId, filas]
   );
 
+  const facturasConSaldo = useMemo(
+    () => filas.filter((f) => f.saldo > 0.005),
+    [filas]
+  );
+
   const detalle = useMemo(
     () => (detalleId ? filas.find((f) => f.id === detalleId) : null),
     [detalleId, filas]
@@ -579,9 +584,37 @@ export default function PagosPage() {
     setShowPago(true);
   }
 
+  function seleccionarFacturaPago(f) {
+    setPagoFacturaId(f.id);
+    setPagoForm((prev) => ({
+      ...prev,
+      importe: prev.importe || (f.saldo > 0 ? Number(f.saldo).toFixed(2) : ""),
+    }));
+    setError(null);
+  }
+
+  function abrirNuevoPago() {
+    setPagoFacturaId(null);
+    setPagoForm({
+      fecha: fechaHoy(),
+      importe: "",
+      medio_pago: "Transferencia",
+      referencia: "",
+      observaciones: "",
+    });
+    setComprobanteFile(null);
+    limpiarIA();
+    setError(null);
+    setShowPago(true);
+  }
+
   async function guardarPago(e) {
     e.preventDefault();
-    if (guardandoPago || !pagoFactura) return;
+    if (guardandoPago) return;
+    if (!pagoFactura) {
+      setError("Elegí la factura a pagar.");
+      return;
+    }
     setError(null);
 
     const importe = Number(pagoForm.importe);
@@ -720,6 +753,12 @@ export default function PagosPage() {
             className="flex items-center gap-1.5 bg-white border border-line text-ink px-4 py-2 rounded-sm text-sm font-medium hover:bg-[#F2EEE3] transition-colors"
           >
             <Download size={16} /> Exportar a Excel
+          </button>
+          <button
+            onClick={abrirNuevoPago}
+            className="flex items-center gap-1.5 bg-[#4B7355] text-white px-4 py-2 rounded-sm text-sm font-medium hover:bg-[#3D5A2E] transition-colors"
+          >
+            <Receipt size={16} /> Cargar pago
           </button>
           <button
             onClick={abrirNueva}
@@ -984,80 +1023,111 @@ export default function PagosPage() {
       )}
 
       {/* Modal de pago */}
-      {showPago && pagoFactura && (
+      {showPago && (
         <div className="fixed inset-0 bg-black/50 flex items-start justify-center z-50 p-4 overflow-y-auto">
           <div className="bg-card w-full max-w-lg rounded-sm border border-line shadow-2xl my-6">
             <div className="flex items-center justify-between px-5 py-4 border-b border-line">
-              <h3 className="font-display text-xl font-semibold">Imputar pago</h3>
+              <h3 className="font-display text-xl font-semibold">Cargar pago</h3>
               <button onClick={() => setShowPago(false)} aria-label="Cerrar"><X size={18} /></button>
             </div>
             <form onSubmit={guardarPago} className="p-5">
               {error && <p className="text-sm text-red mb-3">Error: {error}</p>}
-              <div className="bg-[#F7F4EC] rounded-sm px-3 py-3 mb-4 text-sm">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="font-medium">{pagoFactura.proveedor}</span>
-                  <BadgeEstado estado={pagoFactura.estado} />
-                </div>
-                <div className="text-[#6B6558] mt-0.5">Factura {pagoFactura.numero}</div>
-                <div className="grid grid-cols-3 gap-2 mt-2 text-xs">
-                  <div>
-                    <span className="block text-[10px] uppercase text-[#8A8578]">Importe</span>
-                    <span className="font-mono">{money(pagoFactura.importe, pagoFactura.moneda)}</span>
-                  </div>
-                  <div>
-                    <span className="block text-[10px] uppercase text-[#8A8578]">Pagado</span>
-                    <span className="font-mono text-[#3D5A2E]">{money(pagoFactura.pagado, pagoFactura.moneda)}</span>
-                  </div>
-                  <div>
-                    <span className="block text-[10px] uppercase text-[#8A8578]">Saldo</span>
-                    <span className="font-mono text-[#B25A1E]">{money(pagoFactura.saldo, pagoFactura.moneda)}</span>
-                  </div>
-                </div>
-              </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
-                <Field label="Fecha de pago *">
-                  <input type="date" className={inputCls} value={pagoForm.fecha} onChange={(e) => setPagoForm({ ...pagoForm, fecha: e.target.value })} />
-                </Field>
-                <Field label="Importe a imputar *">
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0.01"
-                    max={pagoFactura.saldo > 0 ? Number(pagoFactura.saldo).toFixed(2) : undefined}
-                    className={inputCls}
-                    value={pagoForm.importe}
-                    onChange={(e) => setPagoForm({ ...pagoForm, importe: e.target.value })}
-                  />
-                </Field>
-                <Field label="Medio de pago">
-                  <select className={inputCls} value={pagoForm.medio_pago} onChange={(e) => setPagoForm({ ...pagoForm, medio_pago: e.target.value })}>
-                    {MEDIOS.map((m) => <option key={m}>{m}</option>)}
-                  </select>
-                </Field>
-                <Field label="Referencia (opcional)">
-                  <input className={inputCls} value={pagoForm.referencia} onChange={(e) => setPagoForm({ ...pagoForm, referencia: e.target.value })} placeholder="Ej. N° transferencia / cheque" />
-                </Field>
-              </div>
-
-              <Field label="Observaciones (opcional)">
-                <input className={inputCls} value={pagoForm.observaciones} onChange={(e) => setPagoForm({ ...pagoForm, observaciones: e.target.value })} placeholder="Ej. Pago parcial acordado" />
+              <Field label="Factura a pagar *">
+                <select
+                  className={inputCls}
+                  value={pagoFacturaId ?? ""}
+                  onChange={(e) => {
+                    const f = filas.find((x) => x.id === Number(e.target.value));
+                    if (f) seleccionarFacturaPago(f);
+                  }}
+                >
+                  <option value="">Elegí una factura con saldo pendiente</option>
+                  {facturasConSaldo.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.proveedor} · {f.numero} · saldo {money(f.saldo, f.moneda)}
+                    </option>
+                  ))}
+                </select>
               </Field>
 
-              <Field label="Comprobante de pago (PDF o imagen) *">
-                <input
-                  type="file"
-                  accept="application/pdf,image/*"
-                  onChange={onComprobante}
-                  className="block w-full text-sm text-[#4A463D] file:mr-3 file:py-2 file:px-3 file:rounded-sm file:border file:border-line file:bg-[#F7F4EC] file:text-sm file:font-medium file:text-ink hover:file:bg-[#F2EEE3]"
-                />
-                {comprobanteFile && <p className="text-xs text-[#6B6558] mt-1">Seleccionado: {comprobanteFile.name}</p>}
-              </Field>
-              <IaEstado disponible={iaDisponible} leyendo={iaLeyendo} mensaje={iaMensaje} error={iaError} />
+              {!pagoFactura && (
+                <p className="text-xs text-[#8A8578] mb-2">
+                  {facturasConSaldo.length
+                    ? "Elegí la factura y después cargá el importe y el comprobante."
+                    : "No hay facturas con saldo pendiente. Cargá primero una factura."}
+                </p>
+              )}
 
-              <button type="submit" disabled={guardandoPago} className="w-full mt-2 bg-[#4B7355] text-white py-2.5 rounded-sm text-sm font-medium hover:bg-[#3D5A2E] disabled:opacity-60">
-                {guardandoPago ? "Guardando..." : "Guardar pago y comprobante"}
-              </button>
+              {pagoFactura && (
+                <>
+                  <div className="bg-[#F7F4EC] rounded-sm px-3 py-3 mb-4 text-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-medium">{pagoFactura.proveedor}</span>
+                      <BadgeEstado estado={pagoFactura.estado} />
+                    </div>
+                    <div className="text-[#6B6558] mt-0.5">Factura {pagoFactura.numero}</div>
+                    <div className="grid grid-cols-3 gap-2 mt-2 text-xs">
+                      <div>
+                        <span className="block text-[10px] uppercase text-[#8A8578]">Importe</span>
+                        <span className="font-mono">{money(pagoFactura.importe, pagoFactura.moneda)}</span>
+                      </div>
+                      <div>
+                        <span className="block text-[10px] uppercase text-[#8A8578]">Pagado</span>
+                        <span className="font-mono text-[#3D5A2E]">{money(pagoFactura.pagado, pagoFactura.moneda)}</span>
+                      </div>
+                      <div>
+                        <span className="block text-[10px] uppercase text-[#8A8578]">Saldo</span>
+                        <span className="font-mono text-[#B25A1E]">{money(pagoFactura.saldo, pagoFactura.moneda)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
+                    <Field label="Fecha de pago *">
+                      <input type="date" className={inputCls} value={pagoForm.fecha} onChange={(e) => setPagoForm({ ...pagoForm, fecha: e.target.value })} />
+                    </Field>
+                    <Field label="Importe a imputar *">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        max={pagoFactura.saldo > 0 ? Number(pagoFactura.saldo).toFixed(2) : undefined}
+                        className={inputCls}
+                        value={pagoForm.importe}
+                        onChange={(e) => setPagoForm({ ...pagoForm, importe: e.target.value })}
+                      />
+                    </Field>
+                    <Field label="Medio de pago">
+                      <select className={inputCls} value={pagoForm.medio_pago} onChange={(e) => setPagoForm({ ...pagoForm, medio_pago: e.target.value })}>
+                        {MEDIOS.map((m) => <option key={m}>{m}</option>)}
+                      </select>
+                    </Field>
+                    <Field label="Referencia (opcional)">
+                      <input className={inputCls} value={pagoForm.referencia} onChange={(e) => setPagoForm({ ...pagoForm, referencia: e.target.value })} placeholder="Ej. N° transferencia / cheque" />
+                    </Field>
+                  </div>
+
+                  <Field label="Observaciones (opcional)">
+                    <input className={inputCls} value={pagoForm.observaciones} onChange={(e) => setPagoForm({ ...pagoForm, observaciones: e.target.value })} placeholder="Ej. Pago parcial acordado" />
+                  </Field>
+
+                  <Field label="Comprobante de pago (PDF o imagen) *">
+                    <input
+                      type="file"
+                      accept="application/pdf,image/*"
+                      onChange={onComprobante}
+                      className="block w-full text-sm text-[#4A463D] file:mr-3 file:py-2 file:px-3 file:rounded-sm file:border file:border-line file:bg-[#F7F4EC] file:text-sm file:font-medium file:text-ink hover:file:bg-[#F2EEE3]"
+                    />
+                    {comprobanteFile && <p className="text-xs text-[#6B6558] mt-1">Seleccionado: {comprobanteFile.name}</p>}
+                  </Field>
+                  <IaEstado disponible={iaDisponible} leyendo={iaLeyendo} mensaje={iaMensaje} error={iaError} />
+
+                  <button type="submit" disabled={guardandoPago} className="w-full mt-2 bg-[#4B7355] text-white py-2.5 rounded-sm text-sm font-medium hover:bg-[#3D5A2E] disabled:opacity-60">
+                    {guardandoPago ? "Guardando..." : "Guardar pago y comprobante"}
+                  </button>
+                </>
+              )}
             </form>
           </div>
         </div>
