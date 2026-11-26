@@ -16,10 +16,10 @@ const MIME_PERMITIDOS = ["application/pdf", "image/jpeg", "image/png", "image/we
 const MODELO_POR_DEFECTO = "gemini-3.8-flash";
 const MODELOS_PREFERIDOS = [
   "gemini-3.8-flash",
-  "gemini-3.7-flash",
+  "gemini-3.5-flash-lite",
   "gemini-3.6-flash",
   "gemini-3.5-flash",
-  "gemini-3.5-flash-lite",
+  "gemini-3.7-flash",
   "gemini-3.1-flash-lite",
   "gemini-2.5-flash",
   "gemini-2.5-flash-lite",
@@ -257,9 +257,10 @@ function elegirModelo(disponibles) {
   return cualquiera[0] || null;
 }
 
-async function pedirGemini({ apiKey, modelo, base64, mime, prompt, conConfig }) {
+async function pedirGemini({ apiKey, modelo, base64, mime, prompt, conConfig, deadline }) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 50000);
+  const restante = Math.max(5000, (deadline || Date.now() + 50000) - Date.now());
+  const timeout = setTimeout(() => controller.abort(), Math.min(50000, restante));
 
   try {
     const body = {
@@ -295,15 +296,15 @@ async function pedirGemini({ apiKey, modelo, base64, mime, prompt, conConfig }) 
   }
 }
 
-async function intentarModelo({ apiKey, modelo, base64, mime, prompt }) {
-  let { res, json } = await pedirGemini({ apiKey, modelo, base64, mime, prompt, conConfig: true });
+async function intentarModelo({ apiKey, modelo, base64, mime, prompt, deadline }) {
+  let { res, json } = await pedirGemini({ apiKey, modelo, base64, mime, prompt, conConfig: true, deadline });
 
   // Los modelos Gemini 3 ignoran o rechazan algunos parámetros de
   // generationConfig: si el error lo menciona, reintentamos sin ellos.
   if (res.status === 400) {
     const msg = json?.error?.message || "";
     if (/generationconfig|temperature|top_?p|top_?k|response_?mime/i.test(msg)) {
-      ({ res, json } = await pedirGemini({ apiKey, modelo, base64, mime, prompt, conConfig: false }));
+      ({ res, json } = await pedirGemini({ apiKey, modelo, base64, mime, prompt, conConfig: false, deadline }));
     }
   }
 
@@ -315,6 +316,7 @@ async function llamarGemini({ base64, mime, prompt }) {
   if (!apiKey) throw new Error("Falta GEMINI_API_KEY en el servidor.");
 
   const inicial = modeloResuelto || process.env.GEMINI_MODEL || MODELO_POR_DEFECTO;
+  const deadline = Date.now() + 55000;
   const probados = [];
   let disponibles = null;
   let forzarLista = false;
@@ -338,7 +340,7 @@ async function llamarGemini({ base64, mime, prompt }) {
       }
       probados.push(modelo);
 
-      const { res, json } = await intentarModelo({ apiKey, modelo, base64, mime, prompt });
+      const { res, json } = await intentarModelo({ apiKey, modelo, base64, mime, prompt, deadline });
 
       if (res.ok) {
         const textoRespuesta =
