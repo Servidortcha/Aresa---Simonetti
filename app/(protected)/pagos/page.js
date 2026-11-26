@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
 import { useAuth } from "../../../lib/AuthContext";
@@ -17,10 +17,13 @@ import {
   CheckCircle2,
   AlertTriangle,
   Receipt,
+  Sparkles,
+  Loader2,
 } from "lucide-react";
 
 const BUCKET = "facturas-pagos";
 const MEDIOS = ["Transferencia", "Cheque", "Efectivo", "Tarjeta", "Otro"];
+const MAX_IA_BYTES = 4 * 1024 * 1024;
 
 const ESTADOS = {
   pendiente: { label: "Pendiente", bg: "#FBEFE6", color: "#B25A1E" },
@@ -105,6 +108,37 @@ function TarjetaResumen({ label, valor, detalle, color }) {
   );
 }
 
+function IaEstado({ disponible, leyendo, mensaje, error }) {
+  if (disponible === false) {
+    return (
+      <p className="flex items-start gap-1.5 text-xs text-[#8A8578] mt-2">
+        <Sparkles size={13} className="shrink-0 mt-0.5" />
+        Lectura automática no configurada. Podés completar los datos a mano.
+      </p>
+    );
+  }
+  if (!leyendo && !mensaje) return null;
+  const color = error ? "#A43A24" : leyendo ? "#2E6F9E" : "#3D5A2E";
+  return (
+    <div
+      className="flex items-start gap-2 text-xs rounded-sm px-3 py-2 mt-2"
+      style={{
+        backgroundColor: error ? "#F7E4E0" : leyendo ? "#EAF0F5" : "#EAF0E4",
+        color,
+      }}
+    >
+      {leyendo ? (
+        <Loader2 size={14} className="shrink-0 mt-0.5 animate-spin" />
+      ) : error ? (
+        <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+      ) : (
+        <Sparkles size={14} className="shrink-0 mt-0.5" />
+      )}
+      <span>{mensaje}</span>
+    </div>
+  );
+}
+
 const emptyFactura = () => ({
   proveedor: "",
   numero: "",
@@ -127,6 +161,12 @@ export default function PagosPage() {
   const [error, setError] = useState(null);
   const [confirmacion, setConfirmacion] = useState(null);
   const [abriendoPath, setAbriendoPath] = useState(null);
+
+  const [iaDisponible, setIaDisponible] = useState(null);
+  const [iaLeyendo, setIaLeyendo] = useState(false);
+  const [iaMensaje, setIaMensaje] = useState(null);
+  const [iaError, setIaError] = useState(false);
+  const iaReqRef = useRef(0);
 
   const [query, setQuery] = useState("");
   const [estadoFilter, setEstadoFilter] = useState("todas");
@@ -187,6 +227,21 @@ export default function PagosPage() {
   useEffect(() => {
     if (rol && !puedeAcceder) router.replace("/ingreso-egreso");
   }, [rol, puedeAcceder, router]);
+
+  useEffect(() => {
+    let activo = true;
+    fetch("/api/ai/extraer")
+      .then((r) => r.json())
+      .then((data) => {
+        if (activo) setIaDisponible(Boolean(data?.disponible));
+      })
+      .catch(() => {
+        if (activo) setIaDisponible(false);
+      });
+    return () => {
+      activo = false;
+    };
+  }, []);
 
   function mostrarMensaje(texto) {
     setConfirmacion(texto);
@@ -262,6 +317,129 @@ export default function PagosPage() {
     [facturas]
   );
 
+  function limpiarIA() {
+    iaReqRef.current += 1;
+    setIaLeyendo(false);
+    setIaMensaje(null);
+    setIaError(false);
+  }
+
+  async function extraerDatosIA(file, tipo) {
+    const {
+      data: { session: sesionActual },
+    } = await supabase.auth.getSession();
+    if (!sesionActual?.access_token) throw new Error("Sesión no válida.");
+
+    const fd = new FormData();
+    fd.append("archivo", file);
+    fd.append("tipo", tipo);
+
+    const res = await fetch("/api/ai/extraer", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${sesionActual.access_token}` },
+      body: fd,
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error || "No se pudo leer el archivo con IA.");
+    return json.datos || {};
+  }
+
+  async function leerFactura(file) {
+    const req = ++iaReqRef.current;
+    setIaLeyendo(true);
+    setIaError(false);
+    setIaMensaje("Leyendo la factura con IA...");
+    try {
+      const datos = await extraerDatosIA(file, "factura");
+      if (iaReqRef.current !== req) return;
+      setForm((prev) => ({
+        ...prev,
+        proveedor: datos.proveedor || prev.proveedor,
+        numero: datos.numero || prev.numero,
+        fecha: datos.fecha || prev.fecha,
+        vencimiento: datos.vencimiento || prev.vencimiento,
+        importe: datos.importe != null ? String(datos.importe) : prev.importe,
+        moneda: datos.moneda || prev.moneda,
+        categoria: datos.categoria || prev.categoria,
+        observaciones: datos.observaciones || prev.observaciones,
+      }));
+      const detectados = [
+        datos.proveedor,
+        datos.numero,
+        datos.importe != null ? money(datos.importe, datos.moneda || "ARS") : null,
+      ].filter(Boolean);
+      setIaMensaje(
+        detectados.length
+          ? `Datos detectados: ${detectados.join(" · ")}. Revisalos antes de guardar.`
+          : "No se detectaron datos claros. Completalos manualmente."
+      );
+      setIaError(false);
+    } catch (err) {
+      if (iaReqRef.current !== req) return;
+      setIaError(true);
+      setIaMensaje("No se pudo leer automáticamente: " + err.message);
+    } finally {
+      if (iaReqRef.current === req) setIaLeyendo(false);
+    }
+  }
+
+  async function leerComprobante(file) {
+    const req = ++iaReqRef.current;
+    setIaLeyendo(true);
+    setIaError(false);
+    setIaMensaje("Leyendo el comprobante con IA...");
+    try {
+      const datos = await extraerDatosIA(file, "pago");
+      if (iaReqRef.current !== req) return;
+      setPagoForm((prev) => ({
+        ...prev,
+        fecha: datos.fecha || prev.fecha,
+        importe: datos.importe != null ? String(datos.importe) : prev.importe,
+        medio_pago: MEDIOS.includes(datos.medio_pago) ? datos.medio_pago : prev.medio_pago,
+        referencia: datos.referencia || prev.referencia,
+        observaciones: datos.observaciones || prev.observaciones,
+      }));
+      setIaMensaje(
+        datos.importe != null
+          ? `Pago detectado: ${money(datos.importe, pagoFactura?.moneda || "ARS")}. Revisalo antes de guardar.`
+          : "No se detectó el importe. Completalo manualmente."
+      );
+      setIaError(false);
+    } catch (err) {
+      if (iaReqRef.current !== req) return;
+      setIaError(true);
+      setIaMensaje("No se pudo leer automáticamente: " + err.message);
+    } finally {
+      if (iaReqRef.current === req) setIaLeyendo(false);
+    }
+  }
+
+  function onArchivoFactura(e) {
+    const file = e.target.files?.[0] || null;
+    setArchivoFactura(file);
+    limpiarIA();
+    if (!file) return;
+    if (file.size > MAX_IA_BYTES) {
+      setIaError(true);
+      setIaMensaje("El archivo supera los 4 MB: se puede guardar, pero la lectura automática está limitada. Completá los datos a mano.");
+      return;
+    }
+    if (iaDisponible !== false) leerFactura(file);
+  }
+
+  function onComprobante(e) {
+    const file = e.target.files?.[0] || null;
+    setComprobanteFile(file);
+    limpiarIA();
+    if (!file) return;
+    if (file.size > MAX_IA_BYTES) {
+      setIaError(true);
+      setIaMensaje("El archivo supera los 4 MB: se puede guardar, pero la lectura automática está limitada. Completá los datos a mano.");
+      return;
+    }
+    if (iaDisponible !== false) leerComprobante(file);
+  }
+
   async function subirArchivo(file, carpeta) {
     if (file.size > 10 * 1024 * 1024) {
       throw new Error("El archivo supera los 10 MB. Comprimilo o subí una versión más liviana.");
@@ -294,6 +472,7 @@ export default function PagosPage() {
     setEditingId(null);
     setForm(emptyFactura());
     setArchivoFactura(null);
+    limpiarIA();
     setError(null);
     setShowFactura(true);
   }
@@ -311,6 +490,7 @@ export default function PagosPage() {
       observaciones: f.observaciones || "",
     });
     setArchivoFactura(null);
+    limpiarIA();
     setError(null);
     setShowFactura(true);
   }
@@ -394,6 +574,7 @@ export default function PagosPage() {
       observaciones: "",
     });
     setComprobanteFile(null);
+    limpiarIA();
     setError(null);
     setShowPago(true);
   }
@@ -778,7 +959,7 @@ export default function PagosPage() {
                 <input
                   type="file"
                   accept="application/pdf,image/*"
-                  onChange={(e) => setArchivoFactura(e.target.files?.[0] || null)}
+                  onChange={onArchivoFactura}
                   className="block w-full text-sm text-[#4A463D] file:mr-3 file:py-2 file:px-3 file:rounded-sm file:border file:border-line file:bg-[#F7F4EC] file:text-sm file:font-medium file:text-ink hover:file:bg-[#F2EEE3]"
                 />
                 {archivoFactura && <p className="text-xs text-[#6B6558] mt-1">Seleccionado: {archivoFactura.name}</p>}
@@ -792,6 +973,7 @@ export default function PagosPage() {
                   </button>
                 )}
               </Field>
+              <IaEstado disponible={iaDisponible} leyendo={iaLeyendo} mensaje={iaMensaje} error={iaError} />
 
               <button type="submit" disabled={guardandoFactura} className="w-full mt-2 bg-ink text-paper py-2.5 rounded-sm text-sm font-medium hover:bg-[#333731] disabled:opacity-60">
                 {guardandoFactura ? "Guardando..." : editingId ? "Guardar cambios" : "Cargar factura"}
@@ -866,11 +1048,12 @@ export default function PagosPage() {
                 <input
                   type="file"
                   accept="application/pdf,image/*"
-                  onChange={(e) => setComprobanteFile(e.target.files?.[0] || null)}
+                  onChange={onComprobante}
                   className="block w-full text-sm text-[#4A463D] file:mr-3 file:py-2 file:px-3 file:rounded-sm file:border file:border-line file:bg-[#F7F4EC] file:text-sm file:font-medium file:text-ink hover:file:bg-[#F2EEE3]"
                 />
                 {comprobanteFile && <p className="text-xs text-[#6B6558] mt-1">Seleccionado: {comprobanteFile.name}</p>}
               </Field>
+              <IaEstado disponible={iaDisponible} leyendo={iaLeyendo} mensaje={iaMensaje} error={iaError} />
 
               <button type="submit" disabled={guardandoPago} className="w-full mt-2 bg-[#4B7355] text-white py-2.5 rounded-sm text-sm font-medium hover:bg-[#3D5A2E] disabled:opacity-60">
                 {guardandoPago ? "Guardando..." : "Guardar pago y comprobante"}
