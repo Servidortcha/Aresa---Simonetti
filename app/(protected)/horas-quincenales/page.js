@@ -94,6 +94,7 @@ export default function HorasQuincenalesPage() {
   const [cargas, setCargas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [migracionFaltante, setMigracionFaltante] = useState(false);
   const [confirmacion, setConfirmacion] = useState(null);
 
   const [showForm, setShowForm] = useState(false);
@@ -167,25 +168,27 @@ export default function HorasQuincenalesPage() {
       supabase.from("frente_personas").select("frente_id, nombre"),
     ]);
 
-    const err = eFrentes || eCargas;
-    if (err) {
-      setError(
-        /does not exist|no existe/i.test(err.message || "")
-          ? "Falta aplicar la migración 0042_horas_quincenales.sql en Supabase."
-          : err.message
-      );
-      setLoading(false);
-      return;
-    }
-
+    // Los frentes se cargan siempre, aunque falle la tabla de quincenas.
     setFrentes(frentesData || []);
-    setCargas(cargasData || []);
 
     const map = {};
     (personasData || []).forEach((p) => {
       (map[p.frente_id] = map[p.frente_id] || []).push(p.nombre);
     });
     setPersonasPorFrente(map);
+
+    if (eCargas && /does not exist|no existe|schema cache/i.test(eCargas.message || "")) {
+      setMigracionFaltante(true);
+      setCargas([]);
+      setError(null);
+    } else if (eFrentes || eCargas) {
+      setError((eFrentes || eCargas).message);
+    } else {
+      setMigracionFaltante(false);
+      setCargas(cargasData || []);
+      setError(null);
+    }
+
     setLoading(false);
   }
 
@@ -230,6 +233,10 @@ export default function HorasQuincenalesPage() {
   }
 
   function abrirNuevo() {
+    if (migracionFaltante) {
+      setError("Primero aplicá la migración 0042_horas_quincenales.sql en Supabase.");
+      return;
+    }
     if (frentesVisibles.length === 0) {
       setError(
         esGestion
@@ -494,6 +501,19 @@ export default function HorasQuincenalesPage() {
           </button>
         )}
       </div>
+
+      {migracionFaltante && (
+        <div className="mb-4 border border-[#E0C9A0] bg-[#FBF3E2] rounded-sm px-4 py-3">
+          <p className="text-sm font-medium text-[#8A4A16]">
+            Falta crear la tabla de horas quincenales en la base de datos.
+          </p>
+          <p className="text-xs text-[#6B6558] mt-1">
+            Abrí Supabase → SQL Editor, pegá el contenido de{" "}
+            <code className="font-mono">supabase/migrations/0042_horas_quincenales.sql</code> y ejecutalo. Después
+            recargá esta página.
+          </p>
+        </div>
+      )}
 
       {error && <p className="text-sm text-red mb-4">Error: {error}</p>}
       {confirmacion && <p className="text-sm text-green mb-4">{confirmacion}</p>}
