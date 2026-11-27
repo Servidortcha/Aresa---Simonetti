@@ -229,8 +229,25 @@ export default function PartesDiariosPage() {
       !navigator.mediaDevices?.getUserMedia ||
       typeof MediaRecorder === "undefined"
     ) {
-      setIaError("Este navegador no permite grabar audio. Podés subir un archivo de audio.");
+      setIaError(
+        "Este navegador no permite grabar audio. Usá «Subir audio» con un archivo grabado desde la app de grabación del teléfono."
+      );
       return;
+    }
+
+    // Si el usuario ya bloqueó el micrófono para este sitio, Chrome no vuelve a
+    // mostrar el cartel de permiso y getUserMedia falla en silencio. Lo avisamos
+    // antes de intentar, con el paso a paso para destrabarlo.
+    try {
+      const permiso = await navigator.permissions?.query?.({ name: "microphone" });
+      if (permiso?.state === "denied") {
+        setIaError(
+          "El micrófono está bloqueado para este sitio. En Chrome tocá el candado (o los tres puntos) al lado de la dirección → Permisos → Micrófono → Permitir, recargá la página y volvé a intentar. Mientras tanto podés usar «Subir audio»."
+        );
+        return;
+      }
+    } catch {
+      // Si el navegador no soporta consultar permisos, seguimos igual.
     }
 
     try {
@@ -264,8 +281,23 @@ export default function PartesDiariosPage() {
       setGrabando(true);
       setSegundos(0);
       timerRef.current = setInterval(() => setSegundos((s) => s + 1), 1000);
-    } catch {
-      setIaError("No se pudo acceder al micrófono. Revisá los permisos del navegador.");
+    } catch (err) {
+      const nombre = String(err?.name || "");
+      if (nombre === "NotAllowedError" || nombre === "PermissionDeniedError" || nombre === "SecurityError") {
+        setIaError(
+          "El navegador bloqueó el micrófono. Tocá el candado (o los tres puntos) al lado de la dirección → Permisos → Micrófono → Permitir, recargá la página y volvé a intentar. También podés usar «Subir audio»."
+        );
+      } else if (nombre === "NotFoundError" || nombre === "DevicesNotFoundError") {
+        setIaError("No se encontró un micrófono en este dispositivo. Usá «Subir audio».");
+      } else if (nombre === "NotReadableError" || nombre === "TrackStartError") {
+        setIaError("El micrófono está siendo usado por otra aplicación. Cerrala y probá de nuevo.");
+      } else if (nombre === "AbortError") {
+        setIaError("La grabación se interrumpió. Probá de nuevo.");
+      } else {
+        setIaError(
+          `No se pudo acceder al micrófono${nombre ? ` (${nombre})` : ""}. Podés usar «Subir audio» mientras tanto.`
+        );
+      }
     }
   }
 
@@ -882,6 +914,7 @@ export default function PartesDiariosPage() {
 
                   <p className="text-[11px] text-[#8A8578] mt-1.5">
                     Grabá un audio contando lo que se hizo en la jornada y la IA redacta tareas y novedades.
+                    Si el micrófono no funciona, grabá con la app del teléfono y usá «Subir audio».
                   </p>
 
                   {iaDisponible === false && (
