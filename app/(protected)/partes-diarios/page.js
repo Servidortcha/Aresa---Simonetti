@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
 import { useAuth } from "../../../lib/AuthContext";
-import { ClipboardList, Plus, X, Pencil, Trash2, Paperclip, FileText, Printer, ShieldCheck, ChevronDown } from "lucide-react";
+import { ClipboardList, Plus, X, Pencil, Trash2, Paperclip, FileText, Printer, ShieldCheck, ChevronDown, Mic, Square, Sparkles, Loader2, Check } from "lucide-react";
 import { DocPrint, DocGrid, DocTabla, DocFila, DocNota } from "../../../components/DocPrint";
 
 const inputCls = "w-full px-3 py-2 bg-white border border-line rounded-sm text-sm text-ink focus:outline-none focus:ring-2 focus:ring-green focus:border-transparent";
@@ -67,6 +67,19 @@ export default function PartesDiariosPage() {
   const [guardandoAcceso, setGuardandoAcceso] = useState(false);
   const [mostrarAccesos, setMostrarAccesos] = useState(false);
 
+  // Dictado del parte por audio con IA
+  const [iaDisponible, setIaDisponible] = useState(null);
+  const [grabando, setGrabando] = useState(false);
+  const [segundos, setSegundos] = useState(0);
+  const [audioUrl, setAudioUrl] = useState(null);
+  const [iaLeyendo, setIaLeyendo] = useState(false);
+  const [iaResultado, setIaResultado] = useState(null);
+  const [iaError, setIaError] = useState(null);
+  const mediaRef = useRef(null);
+  const chunksRef = useRef([]);
+  const timerRef = useRef(null);
+  const audioUrlRef = useRef(null);
+
   useEffect(() => {
     if (rol && rol !== "admin" && rol !== "encargado" && rol !== "supervision" && rol !== "subadmin") router.replace("/ingreso-egreso");
   }, [rol, router]);
@@ -75,6 +88,49 @@ export default function PartesDiariosPage() {
     cargar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (soloLectura) return;
+    let activo = true;
+    fetch("/api/ai/parte")
+      .then((r) => r.json())
+      .then((d) => {
+        if (activo) setIaDisponible(Boolean(d?.disponible));
+      })
+      .catch(() => {
+        if (activo) setIaDisponible(false);
+      });
+    return () => {
+      activo = false;
+    };
+  }, [soloLectura]);
+
+  useEffect(() => {
+    return () => {
+      clearInterval(timerRef.current);
+      const rec = mediaRef.current;
+      if (rec && rec.state !== "inactive") {
+        rec.onstop = () => {
+          try {
+            rec.stream.getTracks().forEach((t) => t.stop());
+          } catch {
+            // sin acción
+          }
+        };
+        try {
+          rec.stop();
+        } catch {
+          // sin acción
+        }
+      }
+      if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (grabando && segundos >= 180) detenerGrabacion();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [grabando, segundos]);
 
   const frentesVisibles = useMemo(
     () => (esGestion || esSupervision ? frentes : frentes.filter((f) => f.encargado_user_id === session?.user?.id)),
@@ -132,6 +188,149 @@ export default function PartesDiariosPage() {
     return (personasPorFrente[frenteIdSel] || []).map((nombre) => ({ nombre, horas: "" }));
   }
 
+  function limpiarAudio() {
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+    }
+    setAudioUrl(null);
+    setIaResultado(null);
+    setIaError(null);
+  }
+
+  function detenerGrabacion(descartar = false) {
+    clearInterval(timerRef.current);
+    timerRef.current = null;
+    setGrabando(false);
+    const rec = mediaRef.current;
+    if (rec && rec.state !== "inactive") {
+      if (descartar) {
+        // Al cerrar el formulario no mandamos el audio a la IA.
+        rec.onstop = () => {
+          try {
+            rec.stream.getTracks().forEach((t) => t.stop());
+          } catch {
+            // sin acción
+          }
+        };
+      }
+      try {
+        rec.stop();
+      } catch {
+        // sin acción
+      }
+    }
+  }
+
+  async function empezarGrabacion() {
+    limpiarAudio();
+    if (
+      typeof window === "undefined" ||
+      !navigator.mediaDevices?.getUserMedia ||
+      typeof MediaRecorder === "undefined"
+    ) {
+      setIaError("Este navegador no permite grabar audio. Podés subir un archivo de audio.");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const preferidos = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg"];
+      const mime = preferidos.find((m) => MediaRecorder.isTypeSupported?.(m)) || "";
+      const rec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+      chunksRef.current = [];
+
+      rec.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
+      };
+
+      rec.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const tipo = (rec.mimeType || mime || "audio/webm").split(";")[0];
+        const blob = new Blob(chunksRef.current, { type: tipo });
+        chunksRef.current = [];
+        if (!blob.size) {
+          setIaError("No se grabó audio. Probá de nuevo.");
+          return;
+        }
+        const url = URL.createObjectURL(blob);
+        audioUrlRef.current = url;
+        setAudioUrl(url);
+        leerAudio(blob);
+      };
+
+      rec.start();
+      mediaRef.current = rec;
+      setGrabando(true);
+      setSegundos(0);
+      timerRef.current = setInterval(() => setSegundos((s) => s + 1), 1000);
+    } catch {
+      setIaError("No se pudo acceder al micrófono. Revisá los permisos del navegador.");
+    }
+  }
+
+  async function leerAudio(blob) {
+    setIaLeyendo(true);
+    setIaError(null);
+    setIaResultado(null);
+    try {
+      const {
+        data: { session: sesionActual },
+      } = await supabase.auth.getSession();
+      if (!sesionActual?.access_token) throw new Error("Sesión no válida.");
+
+      const ext = blob.type.includes("mp4") ? "m4a" : blob.type.includes("ogg") ? "ogg" : "webm";
+      const fd = new FormData();
+      fd.append("archivo", blob, `parte.${ext}`);
+
+      const res = await fetch("/api/ai/parte", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${sesionActual.access_token}` },
+        body: fd,
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || "No se pudo interpretar el audio.");
+
+      setIaResultado({
+        tareas: json.datos?.tareas || "",
+        novedades: json.datos?.novedades || "",
+      });
+    } catch (err) {
+      setIaError(err.message);
+    } finally {
+      setIaLeyendo(false);
+    }
+  }
+
+  function onAudioFile(e) {
+    const file = e.target.files?.[0] || null;
+    e.target.value = "";
+    if (!file) return;
+    limpiarAudio();
+    if (file.size > 4 * 1024 * 1024) {
+      setIaError("El audio supera los 4 MB. Grabá uno más corto.");
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    audioUrlRef.current = url;
+    setAudioUrl(url);
+    leerAudio(file);
+  }
+
+  function aplicarResultado(modo) {
+    if (!iaResultado) return;
+    const { tareas: t, novedades: n } = iaResultado;
+    if (t) setTareas((prev) => (modo === "agregar" && prev.trim() ? `${prev.trim()}\n${t}` : t));
+    if (n) setNovedades((prev) => (modo === "agregar" && prev.trim() ? `${prev.trim()}\n${n}` : n));
+    limpiarAudio();
+  }
+
+  function cerrarFormulario() {
+    detenerGrabacion(true);
+    limpiarAudio();
+    setShowForm(false);
+  }
+
   function abrirNuevo() {
     if (frentesVisibles.length === 0) {
       setError(esAdmin ? "No hay frentes cargados. Creá uno en Organigrama." : "Tu frente todavía no está configurado. Avisá al administrador.");
@@ -146,6 +345,8 @@ export default function PartesDiariosPage() {
     setHoras(horasIniciales(frentesVisibles[0].id));
     setArchivosSeleccionados([]);
     setArchivosActuales([]);
+    detenerGrabacion(true);
+    limpiarAudio();
     setShowForm(true);
   }
 
@@ -163,6 +364,8 @@ export default function PartesDiariosPage() {
     );
     setArchivosSeleccionados([]);
     setArchivosActuales(parte.archivos || []);
+    detenerGrabacion(true);
+    limpiarAudio();
     setShowForm(true);
   }
 
@@ -273,6 +476,8 @@ export default function PartesDiariosPage() {
       setError(error.message);
       return;
     }
+    detenerGrabacion(true);
+    limpiarAudio();
     setShowForm(false);
     setConfirmacion(editing ? "Parte actualizado" : "Parte guardado");
     setTimeout(() => setConfirmacion(null), 3000);
@@ -556,7 +761,7 @@ export default function PartesDiariosPage() {
           <div className="bg-card w-full max-w-lg rounded-sm border border-line shadow-2xl my-4">
             <div className="flex items-center justify-between px-5 py-4 border-b border-line">
               <h3 className="font-display text-xl font-semibold">{editing ? "Editar parte diario" : "Nuevo parte diario"}</h3>
-              <button onClick={() => setShowForm(false)}>
+              <button onClick={cerrarFormulario}>
                 <X size={18} />
               </button>
             </div>
@@ -640,6 +845,128 @@ export default function PartesDiariosPage() {
                     </div>
                   </Field>
                 </>
+              )}
+
+              {!soloLectura && (
+                <div className="border border-line rounded-sm bg-[#F9F7F1] px-3 py-3 mb-3">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <span className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-[#6B6558]">
+                      <Sparkles size={13} color="#F4791E" /> Dictar el parte
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {!grabando ? (
+                        <button
+                          type="button"
+                          onClick={empezarGrabacion}
+                          disabled={iaLeyendo}
+                          className="flex items-center gap-1.5 border border-line bg-white px-3 py-1.5 rounded-sm text-sm font-medium text-ink hover:bg-[#F2EEE3] disabled:opacity-60"
+                        >
+                          <Mic size={15} /> Grabar
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={detenerGrabacion}
+                          className="flex items-center gap-1.5 bg-[#C7522A] text-white px-3 py-1.5 rounded-sm text-sm font-medium hover:bg-red"
+                        >
+                          <Square size={12} /> Detener {String(Math.floor(segundos / 60)).padStart(2, "0")}:
+                          {String(segundos % 60).padStart(2, "0")}
+                        </button>
+                      )}
+                      <label className="flex items-center gap-1.5 border border-line bg-white px-3 py-1.5 rounded-sm text-sm font-medium text-ink hover:bg-[#F2EEE3] cursor-pointer">
+                        <Paperclip size={14} /> Subir audio
+                        <input type="file" accept="audio/*" className="hidden" onChange={onAudioFile} />
+                      </label>
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-[#8A8578] mt-1.5">
+                    Grabá un audio contando lo que se hizo en la jornada y la IA redacta tareas y novedades.
+                  </p>
+
+                  {iaDisponible === false && (
+                    <p className="text-xs text-[#8A8578] mt-1">
+                      La lectura automática no está configurada. Podés escribir el parte a mano.
+                    </p>
+                  )}
+
+                  {audioUrl && (
+                    <div className="flex items-center gap-2 mt-2">
+                      <audio src={audioUrl} controls className="h-8 w-full max-w-[280px]" />
+                      <button
+                        type="button"
+                        onClick={limpiarAudio}
+                        className="text-[#8A8578] hover:text-red p-1"
+                        title="Descartar audio"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  )}
+
+                  {iaLeyendo && (
+                    <p className="flex items-center gap-1.5 text-xs text-[#2E6F9E] mt-2">
+                      <Loader2 size={13} className="animate-spin" /> Escuchando y redactando...
+                    </p>
+                  )}
+
+                  {iaError && <p className="text-xs text-red mt-2">{iaError}</p>}
+
+                  {iaResultado && (
+                    <div className="mt-2 border border-[#B9CBA9] bg-[#EAF0E4] rounded-sm px-3 py-2.5">
+                      {iaResultado.tareas ? (
+                        <div className="mb-2">
+                          <span className="block text-[10px] uppercase tracking-wide text-[#3D5A2E]">
+                            Tareas detectadas
+                          </span>
+                          <p className="text-xs whitespace-pre-wrap text-[#2F4A22]">{iaResultado.tareas}</p>
+                        </div>
+                      ) : null}
+                      {iaResultado.novedades ? (
+                        <div className="mb-2">
+                          <span className="block text-[10px] uppercase tracking-wide text-[#8A4A16]">
+                            Novedades detectadas
+                          </span>
+                          <p className="text-xs whitespace-pre-wrap text-[#8A4A16]">{iaResultado.novedades}</p>
+                        </div>
+                      ) : null}
+                      {!iaResultado.tareas && !iaResultado.novedades && (
+                        <p className="text-xs text-[#6B6558] mb-2">
+                          No se entendió el audio. Probá grabarlo de nuevo.
+                        </p>
+                      )}
+                      <div className="flex flex-wrap items-center gap-2">
+                        {(iaResultado.tareas || iaResultado.novedades) && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => aplicarResultado("reemplazar")}
+                              className="flex items-center gap-1 bg-[#3D5A2E] text-white px-2.5 py-1.5 rounded-sm text-xs font-medium hover:bg-[#2F4A22]"
+                            >
+                              <Check size={13} /> Usar
+                            </button>
+                            {(tareas.trim() || novedades.trim()) && (
+                              <button
+                                type="button"
+                                onClick={() => aplicarResultado("agregar")}
+                                className="border border-[#B9CBA9] bg-white px-2.5 py-1.5 rounded-sm text-xs font-medium text-[#3D5A2E] hover:bg-[#F2EEE3]"
+                              >
+                                Agregar al final
+                              </button>
+                            )}
+                          </>
+                        )}
+                        <button
+                          type="button"
+                          onClick={limpiarAudio}
+                          className="text-xs text-[#6B6558] hover:underline"
+                        >
+                          Descartar
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
 
               <Field label="Tareas realizadas">
