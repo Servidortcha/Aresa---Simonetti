@@ -22,6 +22,27 @@ const inputCls =
   "w-full px-3 py-2 bg-white border border-line rounded-sm text-sm text-ink focus:outline-none focus:ring-2 focus:ring-green focus:border-transparent";
 const textareaCls = inputCls + " resize-y min-h-[70px]";
 
+const MESES = {
+  ene: 1,
+  feb: 2,
+  mar: 3,
+  abr: 4,
+  may: 5,
+  jun: 6,
+  jul: 7,
+  ago: 8,
+  sep: 9,
+  oct: 10,
+  nov: 11,
+  dic: 12,
+};
+
+let seqColumnas = 0;
+function nuevaKey() {
+  seqColumnas += 1;
+  return "c" + seqColumnas;
+}
+
 function Field({ label, children }) {
   return (
     <label className="block mb-3">
@@ -55,23 +76,57 @@ function formatFecha(fecha) {
   });
 }
 
-function fmtHoras(n) {
-  const v = Number(n) || 0;
-  return v.toLocaleString("es-AR", { maximumFractionDigits: 2 });
+function fmtMin(total) {
+  const min = Math.max(0, Math.round(Number(total) || 0));
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return `${h}:${String(m).padStart(2, "0")}`;
 }
 
-function parseHoras(valor) {
-  const s = String(valor ?? "")
-    .replace(/[^\d,.-]/g, "")
-    .replace(",", ".");
-  const n = Number.parseFloat(s);
-  return Number.isFinite(n) ? Math.max(0, Math.round(n * 100) / 100) : 0;
+// Acepta "11:50", "121:37", "11h50" o "11,5" (horas decimales) y devuelve minutos.
+function aMinutos(valor) {
+  if (typeof valor === "number" && Number.isFinite(valor)) {
+    return Math.max(0, Math.round(valor * 60));
+  }
+  const s = String(valor ?? "").trim();
+  if (!s) return 0;
+
+  const hm = s.match(/^(\d{1,4})\s*[:hH]\s*(\d{1,2})$/);
+  if (hm) return Number(hm[1]) * 60 + Number(hm[2]);
+
+  const dec = s.replace(",", ".").match(/^(\d{1,4}(?:\.\d{1,2})?)$/);
+  if (dec) return Math.max(0, Math.round(Number(dec[1]) * 60));
+
+  return 0;
 }
 
-function totalDe(filas) {
-  return Math.round(
-    (Array.isArray(filas) ? filas : []).reduce((acc, f) => acc + (Number(f.horas) || 0), 0) * 100
-  ) / 100;
+function normalizarTexto(s) {
+  return String(s || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+// "PERIODO 24-OCT AL 7-NOV" -> { desde: "2026-10-24", hasta: "2026-11-07" }
+function parsearPeriodo(label) {
+  const n = normalizarTexto(label);
+  if (!n) return null;
+  const m = n.match(/(\d{1,2})\s*([a-z]{3,})[a-z]*\s*(?:al|a|hasta)\s*(\d{1,2})\s*([a-z]{3,})/);
+  if (!m) return null;
+
+  const mes1 = MESES[m[2].slice(0, 3)];
+  const mes2 = MESES[m[4].slice(0, 3)];
+  if (!mes1 || !mes2) return null;
+
+  const anio = new Date().getFullYear();
+  const desde = `${anio}-${String(mes1).padStart(2, "0")}-${String(m[1]).padStart(2, "0")}`;
+  const anioFin = mes2 < mes1 ? anio + 1 : anio;
+  const hasta = `${anioFin}-${String(mes2).padStart(2, "0")}-${String(m[3]).padStart(2, "0")}`;
+
+  if (hasta < desde) return null;
+  return { desde, hasta };
 }
 
 function nombreSeguro(nombre) {
@@ -99,11 +154,11 @@ export default function HorasQuincenalesPage() {
 
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [frenteId, setFrenteId] = useState("");
   const [desde, setDesde] = useState(restarDias(todayISO(), 13));
   const [hasta, setHasta] = useState(todayISO());
   const [fechaEntrega, setFechaEntrega] = useState(todayISO());
   const [observaciones, setObservaciones] = useState("");
+  const [columnas, setColumnas] = useState([]);
   const [filas, setFilas] = useState([]);
   const [archivo, setArchivo] = useState(null);
   const [archivoNuevo, setArchivoNuevo] = useState(null);
@@ -117,7 +172,6 @@ export default function HorasQuincenalesPage() {
   const [iaError, setIaError] = useState(false);
 
   const [confirmarBorrar, setConfirmarBorrar] = useState(null);
-  const [filtroFrente, setFiltroFrente] = useState("Todos");
   const [imprimirCarga, setImprimirCarga] = useState(null);
 
   const archivoInputRef = useRef(null);
@@ -163,12 +217,11 @@ export default function HorasQuincenalesPage() {
       { data: cargasData, error: eCargas },
       { data: personasData },
     ] = await Promise.all([
-      supabase.from("frentes_trabajo").select("id, nombre, encargado_user_id").order("nombre"),
+      supabase.from("frentes_trabajo").select("id, nombre").order("nombre"),
       supabase.from("horas_quincenales").select("*").order("desde", { ascending: false }),
       supabase.from("frente_personas").select("frente_id, nombre"),
     ]);
 
-    // Los frentes se cargan siempre, aunque falle la tabla de quincenas.
     setFrentes(frentesData || []);
 
     const map = {};
@@ -184,40 +237,30 @@ export default function HorasQuincenalesPage() {
     } else if (eFrentes || eCargas) {
       setError((eFrentes || eCargas).message);
     } else {
-      setMigracionFaltante(false);
-      setCargas(cargasData || []);
+      const lista = cargasData || [];
+      // Si la tabla existe pero todavía no tiene las columnas nuevas,
+      // avisamos que falta la migración 0043.
+      setMigracionFaltante(lista.length > 0 && !("columnas" in lista[0]));
+      setCargas(lista);
       setError(null);
     }
 
     setLoading(false);
   }
 
-  const frentesVisibles = useMemo(
-    () =>
-      esGestion || esSupervision
-        ? frentes
-        : frentes.filter((f) => f.encargado_user_id === session?.user?.id),
-    [frentes, esGestion, esSupervision, session]
-  );
-
-  const nombreFrente = useMemo(() => {
-    const map = {};
-    frentes.forEach((f) => {
-      map[f.id] = f.nombre;
+  const personasTodas = useMemo(() => {
+    const set = new Set();
+    Object.values(personasPorFrente).forEach((lista) => {
+      (lista || []).forEach((n) => {
+        if (n) set.add(n);
+      });
     });
-    return map;
-  }, [frentes]);
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "es"));
+  }, [personasPorFrente]);
 
-  const cargasFiltradas = useMemo(
-    () =>
-      filtroFrente === "Todos"
-        ? cargas
-        : cargas.filter((c) => c.frente_id === filtroFrente),
-    [cargas, filtroFrente]
-  );
-
-  const totalFormulario = totalDe(
-    filas.map((f) => ({ horas: parseHoras(f.horas) }))
+  const totalGeneral = useMemo(
+    () => filas.reduce((acc, f) => acc + totalFila(f, columnas), 0),
+    [filas, columnas]
   );
 
   function limpiarArchivo() {
@@ -234,42 +277,49 @@ export default function HorasQuincenalesPage() {
 
   function abrirNuevo() {
     if (migracionFaltante) {
-      setError("Primero aplicá la migración 0042_horas_quincenales.sql en Supabase.");
+      setError("Primero aplicá la migración 0043_horas_quincenales_columnas.sql en Supabase.");
       return;
     }
-    if (frentesVisibles.length === 0) {
-      setError(
-        esGestion
-          ? "No hay frentes cargados. Creá uno en Organigrama."
-          : "Tu frente todavía no está configurado. Avisá al administrador."
-      );
-      return;
-    }
-    const fid = frentesVisibles[0].id;
+    const cols = frentes.length
+      ? frentes.map((f) => ({ key: nuevaKey(), nombre: f.nombre }))
+      : [{ key: nuevaKey(), nombre: "" }];
+
     setEditing(null);
-    setFrenteId(fid);
     setDesde(restarDias(todayISO(), 13));
     setHasta(todayISO());
     setFechaEntrega(todayISO());
     setObservaciones("");
-    setFilas((personasPorFrente[fid] || []).map((nombre) => ({ nombre, horas: "" })));
+    setColumnas(cols);
+    setFilas([]);
     limpiarArchivo();
     setShowForm(true);
   }
 
   function abrirEditar(carga) {
+    const cols = (Array.isArray(carga.columnas) ? carga.columnas : []).map((nombre) => ({
+      key: nuevaKey(),
+      nombre: String(nombre || ""),
+    }));
+
+    const detalle = Array.isArray(carga.detalle) ? carga.detalle : [];
+    const filasCarga = detalle.map((p) => {
+      const valores = {};
+      cols.forEach((c, i) => {
+        const minutos = Array.isArray(p.minutos)
+          ? p.minutos[i] || 0
+          : Math.round((Number(p.horas) || 0) * 60);
+        valores[c.key] = fmtMin(minutos);
+      });
+      return { nombre: p.nombre || "", valores };
+    });
+
     setEditing(carga);
-    setFrenteId(carga.frente_id || frentesVisibles[0]?.id || "");
     setDesde(carga.desde || restarDias(todayISO(), 13));
     setHasta(carga.hasta || todayISO());
     setFechaEntrega(carga.fecha_entrega || todayISO());
     setObservaciones(carga.observaciones || "");
-    setFilas(
-      (Array.isArray(carga.detalle) ? carga.detalle : []).map((p) => ({
-        nombre: p.nombre || "",
-        horas: p.horas != null ? String(p.horas).replace(".", ",") : "",
-      }))
-    );
+    setColumnas(cols.length ? cols : [{ key: nuevaKey(), nombre: "" }]);
+    setFilas(filasCarga);
     limpiarArchivo();
     if (carga.archivo?.url) {
       setArchivo(carga.archivo);
@@ -283,12 +333,28 @@ export default function HorasQuincenalesPage() {
     setShowForm(false);
   }
 
-  function actualizarFila(idx, campo, valor) {
-    setFilas((prev) => prev.map((f, i) => (i === idx ? { ...f, [campo]: valor } : f)));
+  function actualizarFila(idx, nombre) {
+    setFilas((prev) => prev.map((f, i) => (i === idx ? { ...f, nombre } : f)));
+  }
+
+  function actualizarCelda(idx, key, valor) {
+    setFilas((prev) =>
+      prev.map((f, i) => (i === idx ? { ...f, valores: { ...f.valores, [key]: valor } } : f))
+    );
+  }
+
+  function normalizarCelda(idx, key) {
+    setFilas((prev) =>
+      prev.map((f, i) =>
+        i === idx
+          ? { ...f, valores: { ...f.valores, [key]: fmtMin(aMinutos(f.valores?.[key])) } }
+          : f
+      )
+    );
   }
 
   function agregarFila() {
-    setFilas((prev) => [...prev, { nombre: "", horas: "" }]);
+    setFilas((prev) => [...prev, { nombre: "", valores: {} }]);
   }
 
   function quitarFila(idx) {
@@ -296,14 +362,25 @@ export default function HorasQuincenalesPage() {
   }
 
   function cargarPersonal() {
-    const delFrente = personasPorFrente[frenteId] || [];
     setFilas((prev) => {
       const existentes = new Set(prev.map((f) => f.nombre.trim().toLowerCase()).filter(Boolean));
-      const nuevas = delFrente
+      const nuevas = personasTodas
         .filter((n) => !existentes.has(String(n).trim().toLowerCase()))
-        .map((nombre) => ({ nombre, horas: "" }));
+        .map((nombre) => ({ nombre, valores: {} }));
       return [...prev, ...nuevas];
     });
+  }
+
+  function renombrarColumna(key, nombre) {
+    setColumnas((prev) => prev.map((c) => (c.key === key ? { ...c, nombre } : c)));
+  }
+
+  function agregarColumna() {
+    setColumnas((prev) => [...prev, { key: nuevaKey(), nombre: "" }]);
+  }
+
+  function quitarColumna(key) {
+    setColumnas((prev) => prev.filter((c) => c.key !== key));
   }
 
   async function leerHoras(file) {
@@ -327,23 +404,39 @@ export default function HorasQuincenalesPage() {
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error || "No se pudo leer la planilla.");
 
+      const cols = json?.datos?.columnas || [];
       const personas = json?.datos?.personas || [];
-      if (!personas.length) {
+
+      if (!cols.length || !personas.length) {
         setIaError(true);
         setIaMensaje(
-          "No se detectaron personas en la imagen. Probá con una foto más nítida o cargá las horas a mano."
+          "No se detectaron personas ni columnas en la imagen. Probá con una foto más nítida o cargá las horas a mano."
         );
         return;
       }
 
+      const nuevasCols = cols.map((nombre) => ({ key: nuevaKey(), nombre: String(nombre) }));
+      setColumnas(nuevasCols);
       setFilas(
-        personas.map((p) => ({
-          nombre: p.nombre || "",
-          horas: p.horas != null ? String(p.horas).replace(".", ",") : "",
-        }))
+        personas.map((p) => {
+          const valores = {};
+          nuevasCols.forEach((c, i) => {
+            valores[c.key] = fmtMin(Array.isArray(p.minutos) ? p.minutos[i] || 0 : 0);
+          });
+          return { nombre: p.nombre || "", valores };
+        })
       );
+
+      const periodo = parsearPeriodo(json?.datos?.periodo);
+      if (periodo) {
+        setDesde(periodo.desde);
+        setHasta(periodo.hasta);
+      }
+
       setIaMensaje(
-        `Se detectaron ${personas.length} persona(s). Revisá los nombres y las horas antes de guardar.`
+        `Se detectaron ${personas.length} persona(s) y ${cols.length} columna(s)${
+          periodo ? ` del período ${formatFecha(periodo.desde)} al ${formatFecha(periodo.hasta)}` : ""
+        }. Revisá los datos antes de guardar.`
       );
     } catch (err) {
       setIaError(true);
@@ -385,10 +478,6 @@ export default function HorasQuincenalesPage() {
     e.preventDefault();
     setError(null);
 
-    if (!frenteId) {
-      setError("Elegí el frente de trabajo.");
-      return;
-    }
     if (!desde || !hasta) {
       setError("Completá el período de la quincena.");
       return;
@@ -398,42 +487,67 @@ export default function HorasQuincenalesPage() {
       return;
     }
 
-    const limpias = filas
-      .map((f) => ({ nombre: String(f.nombre || "").trim(), horas: parseHoras(f.horas) }))
+    const colsLimpias = columnas
+      .map((c) => ({ key: c.key, nombre: String(c.nombre || "").trim() }))
+      .filter((c) => c.nombre);
+
+    if (colsLimpias.length === 0) {
+      setError("Agregá al menos una columna de horas (frente u obra).");
+      return;
+    }
+
+    const filasLimpias = filas
+      .map((f) => ({
+        nombre: String(f.nombre || "").trim(),
+        minutos: colsLimpias.map((c) => aMinutos(f.valores?.[c.key])),
+      }))
       .filter((f) => f.nombre);
 
-    if (limpias.length === 0) {
+    if (filasLimpias.length === 0) {
       setError("Agregá al menos una persona con sus horas.");
       return;
     }
+
+    const totalMin = filasLimpias.reduce(
+      (acc, f) => acc + f.minutos.reduce((a, b) => a + b, 0),
+      0
+    );
 
     setEnviando(true);
     try {
       let archivoFinal = archivo;
 
       if (archivoNuevo) {
-        setProgreso("Subiendo la foto...");
-        const path = `${frenteId}/${Date.now()}-${nombreSeguro(archivoNuevo.name || "planilla.jpg")}`;
+        setProgreso("Subiendo la imagen...");
+        const path = `${session?.user?.id || "general"}/${Date.now()}-${nombreSeguro(
+          archivoNuevo.name || "planilla.jpg"
+        )}`;
         const { error: upErr } = await supabase.storage
           .from("horas-quincenales")
           .upload(path, archivoNuevo, { cacheControl: "3600", upsert: false });
-        if (upErr) throw new Error("Error al subir la foto: " + upErr.message);
+        if (upErr) throw new Error("Error al subir la imagen: " + upErr.message);
         const { data: pub } = supabase.storage.from("horas-quincenales").getPublicUrl(path);
-        archivoFinal = { name: archivoNuevo.name || "planilla", url: pub.publicUrl, type: archivoNuevo.type || "" };
+        archivoFinal = {
+          name: archivoNuevo.name || "planilla",
+          url: pub.publicUrl,
+          type: archivoNuevo.type || "",
+        };
       }
 
       setProgreso("Guardando la quincena...");
 
       const payload = {
-        frente_id: frenteId,
         desde,
         hasta,
         fecha_entrega: fechaEntrega || null,
-        detalle: limpias,
-        total_horas: totalDe(limpias),
+        columnas: colsLimpias.map((c) => c.nombre),
+        detalle: filasLimpias,
+        total_minutos: totalMin,
+        total_horas: Math.round((totalMin / 60) * 100) / 100,
         observaciones: observaciones.trim() || null,
         archivo: archivoFinal || null,
         usuario_email: session?.user?.email || null,
+        usuario_id: session?.user?.id || null,
       };
 
       const { error: err } = editing
@@ -448,7 +562,13 @@ export default function HorasQuincenalesPage() {
       setTimeout(() => setConfirmacion(null), 3000);
       cargar();
     } catch (err) {
-      setError(err.message || String(err));
+      const mensaje = err.message || String(err);
+      if (/could not find the '(usuario_id|columnas|total_minutos)' column|column .* does not exist/i.test(mensaje)) {
+        setMigracionFaltante(true);
+        setError("Falta aplicar la migración 0043_horas_quincenales_columnas.sql en Supabase.");
+      } else {
+        setError(mensaje);
+      }
     } finally {
       setEnviando(false);
       setProgreso("");
@@ -488,7 +608,7 @@ export default function HorasQuincenalesPage() {
           <div>
             <h1 className="font-display text-3xl font-semibold">Horas quincenales</h1>
             <p className="text-sm text-[#6B6558] mt-0.5">
-              {esGestion ? "Todos los frentes" : esSupervision ? "Frentes asignados" : "Tu frente"}
+              Rendición de horas por frente, con el total a pasarle al jefe
             </p>
           </div>
         </div>
@@ -505,12 +625,12 @@ export default function HorasQuincenalesPage() {
       {migracionFaltante && (
         <div className="mb-4 border border-[#E0C9A0] bg-[#FBF3E2] rounded-sm px-4 py-3">
           <p className="text-sm font-medium text-[#8A4A16]">
-            Falta crear la tabla de horas quincenales en la base de datos.
+            Falta actualizar la tabla de horas quincenales en la base de datos.
           </p>
           <p className="text-xs text-[#6B6558] mt-1">
             Abrí Supabase → SQL Editor, pegá el contenido de{" "}
-            <code className="font-mono">supabase/migrations/0042_horas_quincenales.sql</code> y ejecutalo. Después
-            recargá esta página.
+            <code className="font-mono">supabase/migrations/0043_horas_quincenales_columnas.sql</code> y ejecutalo.
+            Después recargá esta página.
           </p>
         </div>
       )}
@@ -518,68 +638,71 @@ export default function HorasQuincenalesPage() {
       {error && <p className="text-sm text-red mb-4">Error: {error}</p>}
       {confirmacion && <p className="text-sm text-green mb-4">{confirmacion}</p>}
 
-      {(esGestion || esSupervision) && frentes.length > 0 && (
-        <div className="mb-4">
-          <select
-            value={filtroFrente}
-            onChange={(e) => setFiltroFrente(e.target.value)}
-            className={inputCls + " max-w-xs"}
-          >
-            <option value="Todos">Todos los frentes</option>
-            {frentes.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.nombre}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-
       {loading ? (
         <p className="text-sm text-[#8A8578]">Cargando...</p>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {cargasFiltradas.map((c) => {
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {cargas.map((c) => {
+            const cols = Array.isArray(c.columnas) ? c.columnas : [];
             const detalle = Array.isArray(c.detalle) ? c.detalle : [];
-            const total = Number(c.total_horas) || totalDe(detalle);
+            const totalMin = Number(c.total_minutos) || 0;
             return (
               <div key={c.id} className="bg-card border border-line rounded-sm p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <h3 className="font-display text-lg font-semibold truncate">
-                      {nombreFrente[c.frente_id] || "Sin frente"}
-                    </h3>
-                    <p className="text-xs text-[#6B6558]">
+                    <h3 className="font-display text-lg font-semibold">
                       {formatFecha(c.desde)} al {formatFecha(c.hasta)}
-                    </p>
+                    </h3>
+                    <p className="text-xs text-[#6B6558]">{detalle.length} persona(s)</p>
                   </div>
                   <div className="text-right shrink-0">
-                    <span className="block font-display text-2xl font-semibold leading-none">{fmtHoras(total)}</span>
-                    <span className="block text-[10px] uppercase tracking-wide text-[#8A8578] mt-0.5">horas</span>
+                    <span className="block font-display text-2xl font-semibold leading-none">
+                      {fmtMin(totalMin)}
+                    </span>
+                    <span className="block text-[10px] uppercase tracking-wide text-[#8A8578] mt-0.5">
+                      total computable
+                    </span>
                   </div>
                 </div>
 
-                <div className="mt-3 text-sm text-[#4A463D] space-y-0.5">
-                  <p>{detalle.length} persona(s)</p>
-                  {c.fecha_entrega && (
-                    <p className="text-xs text-[#8A8578]">Entregado: {formatFecha(c.fecha_entrega)}</p>
-                  )}
-                  {c.observaciones && (
-                    <p className="text-xs text-[#8A8578] whitespace-pre-wrap">{c.observaciones}</p>
-                  )}
-                </div>
+                {cols.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {cols.map((nombre, i) => (
+                      <span
+                        key={i}
+                        className="inline-flex items-center gap-1 bg-[#F2EEE3] border border-[#E4DFD3] rounded-sm px-2 py-0.5 text-[11px] text-[#4A463D]"
+                      >
+                        <span className="text-[#8A8578]">{nombre}</span>
+                        <span className="font-medium">{fmtMin(totalColumna(detalle, i))}</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {c.fecha_entrega && (
+                  <p className="text-xs text-[#8A8578] mt-2">Entregado: {formatFecha(c.fecha_entrega)}</p>
+                )}
+                {c.observaciones && (
+                  <p className="text-xs text-[#8A8578] mt-1 whitespace-pre-wrap">{c.observaciones}</p>
+                )}
 
                 <div className="mt-3 pt-3 border-t border-[#EFEBE0] flex items-center gap-3 flex-wrap text-sm">
                   <button onClick={() => imprimir(c)} className="flex items-center gap-1 text-[#3B5166] hover:underline">
                     <Printer size={14} /> Imprimir
                   </button>
                   {!soloLectura && (
-                    <button onClick={() => abrirEditar(c)} className="flex items-center gap-1 text-[#3B5166] hover:underline">
+                    <button
+                      onClick={() => abrirEditar(c)}
+                      className="flex items-center gap-1 text-[#3B5166] hover:underline"
+                    >
                       <Pencil size={14} /> Editar
                     </button>
                   )}
                   {!soloLectura && (
-                    <button onClick={() => setConfirmarBorrar(c)} className="flex items-center gap-1 text-[#8A8578] hover:text-red">
+                    <button
+                      onClick={() => setConfirmarBorrar(c)}
+                      className="flex items-center gap-1 text-[#8A8578] hover:text-red"
+                    >
                       <Trash2 size={14} /> Borrar
                     </button>
                   )}
@@ -604,15 +727,13 @@ export default function HorasQuincenalesPage() {
         </div>
       )}
 
-      {!loading && cargasFiltradas.length === 0 && (
-        <p className="text-center text-sm text-[#8A8578] py-8">
-          Aún no hay quincenas cargadas.
-        </p>
+      {!loading && cargas.length === 0 && !migracionFaltante && (
+        <p className="text-center text-sm text-[#8A8578] py-8">Aún no hay quincenas cargadas.</p>
       )}
 
       {showForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-start sm:items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-card w-full max-w-lg rounded-sm border border-line shadow-2xl my-4">
+        <div className="fixed inset-0 bg-black/50 flex items-start justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-card w-full max-w-3xl rounded-sm border border-line shadow-2xl my-4">
             <div className="flex items-center justify-between px-5 py-4 border-b border-line">
               <h3 className="font-display text-xl font-semibold">
                 {editing ? "Editar quincena" : "Nueva quincena"}
@@ -623,40 +744,24 @@ export default function HorasQuincenalesPage() {
             </div>
 
             <form onSubmit={guardar} className="p-5">
-              <Field label="Frente de trabajo">
-                <select
-                  className={inputCls}
-                  value={frenteId}
-                  onChange={(e) => setFrenteId(e.target.value)}
-                  disabled={!esGestion && frentesVisibles.length <= 1}
-                >
-                  {frentesVisibles.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.nombre}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <Field label="Desde">
                   <input type="date" className={inputCls} value={desde} onChange={(e) => setDesde(e.target.value)} required />
                 </Field>
                 <Field label="Hasta">
                   <input type="date" className={inputCls} value={hasta} onChange={(e) => setHasta(e.target.value)} required />
                 </Field>
+                <Field label="Entrega al jefe">
+                  <input
+                    type="date"
+                    className={inputCls}
+                    value={fechaEntrega}
+                    onChange={(e) => setFechaEntrega(e.target.value)}
+                  />
+                </Field>
               </div>
 
-              <Field label="Fecha de entrega al jefe">
-                <input
-                  type="date"
-                  className={inputCls}
-                  value={fechaEntrega}
-                  onChange={(e) => setFechaEntrega(e.target.value)}
-                />
-              </Field>
-
-              <div className="border border-line rounded-sm bg-[#F9F7F1] px-3 py-3 mb-3">
+              <div className="border border-line rounded-sm bg-[#F9F7F1] px-3 py-3 mb-4">
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <span className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-[#6B6558]">
                     <Sparkles size={13} color="#F4791E" /> Foto de la planilla
@@ -680,7 +785,7 @@ export default function HorasQuincenalesPage() {
                 </div>
 
                 <p className="text-[11px] text-[#8A8578] mt-1.5">
-                  Sacá una foto de la planilla de horas y la IA completa la lista. Después revisás y confirmás.
+                  Subí la planilla que le pasás al jefe. La IA lee los nombres, las columnas por frente y las horas.
                 </p>
 
                 {iaDisponible === false && (
@@ -693,7 +798,7 @@ export default function HorasQuincenalesPage() {
                   <img
                     src={previewUrl}
                     alt="Planilla de horas"
-                    className="mt-2 max-h-40 w-auto rounded-sm border border-line"
+                    className="mt-2 max-h-44 w-auto rounded-sm border border-line"
                   />
                 )}
 
@@ -708,60 +813,153 @@ export default function HorasQuincenalesPage() {
                 )}
               </div>
 
-              <Field label={`Personas y horas — total ${fmtHoras(totalFormulario)} h`}>
-                <div className="space-y-2">
-                  {filas.map((f, idx) => (
-                    <div key={idx} className="flex items-center gap-2">
+              <div className="mb-4">
+                <span className="block text-xs uppercase tracking-wide text-[#6B6558] mb-1">
+                  Columnas (frentes u obras)
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  {columnas.map((c) => (
+                    <div key={c.key} className="flex items-center gap-1 border border-line rounded-sm bg-white px-2 py-1">
                       <input
-                        className={inputCls}
-                        value={f.nombre}
-                        onChange={(e) => actualizarFila(idx, "nombre", e.target.value)}
-                        placeholder="Apellido, Nombre"
-                        list="personal-frente"
-                      />
-                      <input
-                        className={inputCls + " shrink-0"}
-                        style={{ width: "5.5rem", appearance: "textfield", WebkitAppearance: "none" }}
-                        inputMode="decimal"
-                        value={f.horas}
-                        onChange={(e) => actualizarFila(idx, "horas", e.target.value)}
-                        placeholder="hs"
+                        className="bg-transparent text-sm outline-none w-32"
+                        value={c.nombre}
+                        onChange={(e) => renombrarColumna(c.key, e.target.value)}
+                        placeholder="Frente"
                       />
                       <button
                         type="button"
-                        onClick={() => quitarFila(idx)}
-                        className="text-[#8A8578] hover:text-red p-1 shrink-0"
-                        title="Quitar persona"
+                        onClick={() => quitarColumna(c.key)}
+                        className="text-[#8A8578] hover:text-red"
+                        title="Quitar columna"
                       >
-                        <X size={16} />
+                        <X size={14} />
                       </button>
                     </div>
                   ))}
-
-                  <datalist id="personal-frente">
-                    {(personasPorFrente[frenteId] || []).map((n, i) => (
-                      <option key={i} value={n} />
-                    ))}
-                  </datalist>
-
-                  <div className="flex items-center gap-3 flex-wrap pt-1">
-                    <button
-                      type="button"
-                      onClick={agregarFila}
-                      className="flex items-center gap-1 text-sm text-[#3B5166] hover:underline"
-                    >
-                      <Plus size={14} /> Agregar persona
-                    </button>
-                    <button
-                      type="button"
-                      onClick={cargarPersonal}
-                      className="flex items-center gap-1 text-sm text-[#3B5166] hover:underline"
-                    >
-                      <Users size={14} /> Cargar personal del frente
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={agregarColumna}
+                    className="flex items-center gap-1 text-sm text-[#3B5166] hover:underline px-1"
+                  >
+                    <Plus size={14} /> Agregar columna
+                  </button>
                 </div>
-              </Field>
+              </div>
+
+              <div className="mb-4">
+                <div className="flex items-center justify-between mb-1 gap-2 flex-wrap">
+                  <span className="block text-xs uppercase tracking-wide text-[#6B6558]">
+                    Personas y horas
+                  </span>
+                  <span className="text-xs text-[#6B6558]">
+                    Total: <span className="font-semibold text-ink">{fmtMin(totalGeneral)}</span>
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto border border-line rounded-sm">
+                  <table className="w-full text-sm border-collapse">
+                    <thead>
+                      <tr className="bg-[#F2EEE3]">
+                        <th className="text-left px-2 py-1.5 font-medium text-[#6B6558] text-xs uppercase tracking-wide min-w-[150px]">
+                          Nombre
+                        </th>
+                        {columnas.map((c) => (
+                          <th
+                            key={c.key}
+                            className="text-center px-2 py-1.5 font-medium text-[#6B6558] text-xs uppercase tracking-wide min-w-[80px]"
+                          >
+                            {c.nombre || "—"}
+                          </th>
+                        ))}
+                        <th className="text-right px-2 py-1.5 font-medium text-[#6B6558] text-xs uppercase tracking-wide min-w-[70px]">
+                          Total
+                        </th>
+                        <th className="w-8" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filas.map((f, idx) => (
+                        <tr key={idx} className="border-t border-[#EFEBE0]">
+                          <td className="px-1 py-1">
+                            <input
+                              className="w-full bg-transparent px-1 py-1 text-sm outline-none"
+                              value={f.nombre}
+                              onChange={(e) => actualizarFila(idx, e.target.value)}
+                              placeholder="Apellido, Nombre"
+                              list="personal-horas"
+                            />
+                          </td>
+                          {columnas.map((c) => (
+                            <td key={c.key} className="px-1 py-1">
+                              <input
+                                className="w-full bg-transparent px-1 py-1 text-sm text-center outline-none"
+                                value={f.valores?.[c.key] ?? ""}
+                                onChange={(e) => actualizarCelda(idx, c.key, e.target.value)}
+                                onBlur={() => normalizarCelda(idx, c.key)}
+                                placeholder="0:00"
+                                inputMode="numeric"
+                              />
+                            </td>
+                          ))}
+                          <td className="px-2 py-1 text-right font-medium whitespace-nowrap">
+                            {fmtMin(totalFila(f, columnas))}
+                          </td>
+                          <td className="px-1 py-1">
+                            <button
+                              type="button"
+                              onClick={() => quitarFila(idx)}
+                              className="text-[#8A8578] hover:text-red p-1"
+                              title="Quitar persona"
+                            >
+                              <X size={14} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      <tr className="border-t-2 border-[#D8D2C4] bg-[#F7F4EC]">
+                        <td className="px-2 py-1.5 font-semibold">TOTAL</td>
+                        {columnas.map((c) => (
+                          <td key={c.key} className="px-2 py-1.5 text-center font-semibold whitespace-nowrap">
+                            {fmtMin(totalColumna(filas, c.key))}
+                          </td>
+                        ))}
+                        <td className="px-2 py-1.5 text-right font-semibold whitespace-nowrap">
+                          {fmtMin(totalGeneral)}
+                        </td>
+                        <td />
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <datalist id="personal-horas">
+                  {personasTodas.map((n, i) => (
+                    <option key={i} value={n} />
+                  ))}
+                </datalist>
+
+                <div className="flex items-center gap-3 flex-wrap pt-2">
+                  <button
+                    type="button"
+                    onClick={agregarFila}
+                    className="flex items-center gap-1 text-sm text-[#3B5166] hover:underline"
+                  >
+                    <Plus size={14} /> Agregar persona
+                  </button>
+                  <button
+                    type="button"
+                    onClick={cargarPersonal}
+                    className="flex items-center gap-1 text-sm text-[#3B5166] hover:underline"
+                  >
+                    <Users size={14} /> Cargar personal
+                  </button>
+                </div>
+
+                <p className="text-[11px] text-[#8A8578] mt-1">
+                  Las horas se cargan como H:MM (por ejemplo 11:50 son 11 horas y 50 minutos). También podés poner
+                  48 y se toma como 48:00.
+                </p>
+              </div>
 
               <Field label="Observaciones (opcional)">
                 <textarea
@@ -801,8 +999,7 @@ export default function HorasQuincenalesPage() {
           <div className="bg-card w-full max-w-sm rounded-sm border border-line shadow-2xl p-5">
             <h3 className="font-display text-lg font-semibold mb-2">¿Eliminar esta quincena?</h3>
             <p className="text-sm text-[#6B6558] mb-4">
-              {nombreFrente[confirmarBorrar.frente_id] || "Sin frente"} — {formatFecha(confirmarBorrar.desde)} al{" "}
-              {formatFecha(confirmarBorrar.hasta)}
+              {formatFecha(confirmarBorrar.desde)} al {formatFecha(confirmarBorrar.hasta)}
             </p>
             <div className="flex justify-end gap-2">
               <button
@@ -862,7 +1059,6 @@ export default function HorasQuincenalesPage() {
 
           <DocGrid
             datos={[
-              { label: "Frente", valor: nombreFrente[imprimirCarga.frente_id] || "—" },
               {
                 label: "Período",
                 valor: `${formatFecha(imprimirCarga.desde)} al ${formatFecha(imprimirCarga.hasta)}`,
@@ -873,13 +1069,25 @@ export default function HorasQuincenalesPage() {
           />
 
           <DocTabla
-            head={[{ label: "Persona" }, { label: "Horas", align: "right" }]}
+            head={[
+              { label: "Nombre" },
+              ...(Array.isArray(imprimirCarga.columnas) ? imprimirCarga.columnas : []).map((nombre) => ({
+                label: nombre,
+                align: "right",
+              })),
+              { label: "Total", align: "right" },
+            ]}
             pie={
               <tfoot>
                 <tr>
-                  <td style={{ padding: "8px 10px", fontWeight: 700 }}>Total</td>
+                  <td style={{ padding: "8px 10px", fontWeight: 700 }}>TOTAL</td>
+                  {(Array.isArray(imprimirCarga.columnas) ? imprimirCarga.columnas : []).map((_, i) => (
+                    <td key={i} style={{ padding: "8px 10px", fontWeight: 700, textAlign: "right" }}>
+                      {fmtMin(totalColumna(imprimirCarga.detalle, i))}
+                    </td>
+                  ))}
                   <td style={{ padding: "8px 10px", fontWeight: 700, textAlign: "right" }}>
-                    {fmtHoras(Number(imprimirCarga.total_horas) || totalDe(imprimirCarga.detalle))} h
+                    {fmtMin(Number(imprimirCarga.total_minutos) || 0)}
                   </td>
                 </tr>
               </tfoot>
@@ -889,7 +1097,19 @@ export default function HorasQuincenalesPage() {
               <DocFila
                 key={i}
                 zebra={i % 2 === 1}
-                celdas={[{ valor: p.nombre }, { valor: `${fmtHoras(p.horas)} h`, align: "right" }]}
+                celdas={[
+                  { valor: p.nombre },
+                  ...(Array.isArray(p.minutos) ? p.minutos : []).map((m) => ({
+                    valor: fmtMin(m),
+                    align: "right",
+                  })),
+                  {
+                    valor: fmtMin(
+                      (Array.isArray(p.minutos) ? p.minutos : []).reduce((a, b) => a + b, 0)
+                    ),
+                    align: "right",
+                  },
+                ]}
               />
             ))}
           </DocTabla>
@@ -900,4 +1120,18 @@ export default function HorasQuincenalesPage() {
       )}
     </>
   );
+}
+
+function totalFila(fila, columnas) {
+  return (columnas || []).reduce((acc, c) => acc + aMinutos(fila?.valores?.[c.key]), 0);
+}
+
+function totalColumna(filas, keyOrIndex) {
+  if (!Array.isArray(filas)) return 0;
+  return filas.reduce((acc, f) => {
+    if (typeof keyOrIndex === "number") {
+      return acc + (Array.isArray(f.minutos) ? f.minutos[keyOrIndex] || 0 : 0);
+    }
+    return acc + aMinutos(f?.valores?.[keyOrIndex]);
+  }, 0);
 }
