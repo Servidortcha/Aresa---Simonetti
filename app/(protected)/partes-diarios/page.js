@@ -70,6 +70,7 @@ export default function PartesDiariosPage() {
   // Dictado del parte por audio con IA
   const [iaDisponible, setIaDisponible] = useState(null);
   const [grabando, setGrabando] = useState(false);
+  const [pidiendoPermiso, setPidiendoPermiso] = useState(false);
   const [segundos, setSegundos] = useState(0);
   const [audioUrl, setAudioUrl] = useState(null);
   const [audioInfo, setAudioInfo] = useState(null);
@@ -226,7 +227,39 @@ export default function PartesDiariosPage() {
     }
   }
 
+  // Pide el micrófono con tiempo límite. Si el navegador no muestra el cartel
+  // de permiso, getUserMedia queda esperando para siempre y el usuario ve que
+  // "no pasa nada". A los 20 s cortamos y explicamos qué hacer.
+  function pedirMicrofono(ms) {
+    return new Promise((resolve, reject) => {
+      let vencido = false;
+      const timer = setTimeout(() => {
+        vencido = true;
+        const e = new Error("timeout");
+        e.name = "TimeoutPermiso";
+        reject(e);
+      }, ms);
+
+      navigator.mediaDevices.getUserMedia({ audio: true }).then(
+        (stream) => {
+          clearTimeout(timer);
+          if (vencido) {
+            // Llegó tarde: apagamos el micrófono para no dejarlo prendido.
+            stream.getTracks().forEach((t) => t.stop());
+            return;
+          }
+          resolve(stream);
+        },
+        (err) => {
+          clearTimeout(timer);
+          if (!vencido) reject(err);
+        }
+      );
+    });
+  }
+
   async function empezarGrabacion() {
+    if (grabando || pidiendoPermiso) return;
     limpiarAudio();
     if (
       typeof window === "undefined" ||
@@ -239,23 +272,40 @@ export default function PartesDiariosPage() {
       return;
     }
 
-    // Si el usuario ya bloqueó el micrófono para este sitio, Chrome no vuelve a
-    // mostrar el cartel de permiso y getUserMedia falla en silencio. Lo avisamos
-    // antes de intentar, con el paso a paso para destrabarlo.
+    setPidiendoPermiso(true);
+    let stream = null;
     try {
-      const permiso = await navigator.permissions?.query?.({ name: "microphone" });
-      if (permiso?.state === "denied") {
+      // Se llama directo desde el toque del botón: si esperamos otra promesa
+      // antes, algunos navegadores pierden el gesto y no muestran el permiso.
+      stream = await pedirMicrofono(20000);
+    } catch (err) {
+      setPidiendoPermiso(false);
+      const nombre = String(err?.name || "");
+      if (nombre === "TimeoutPermiso") {
         setIaError(
-          "El micrófono está bloqueado para este sitio. En Chrome tocá el candado (o los tres puntos) al lado de la dirección → Permisos → Micrófono → Permitir, recargá la página y volvé a intentar. Mientras tanto podés usar «Subir audio»."
+          "No apareció el cartel para permitir el micrófono. Revisá en Android: Ajustes → Aplicaciones → Chrome → Permisos → Micrófono → Permitir. O usá «Subir audio» con un archivo grabado desde la app del teléfono."
         );
-        return;
+      } else if (nombre === "NotAllowedError" || nombre === "PermissionDeniedError" || nombre === "SecurityError") {
+        setIaError(
+          "El navegador bloqueó el micrófono. Tocá el candado (o los tres puntos) al lado de la dirección → Permisos → Micrófono → Permitir, recargá la página y volvé a intentar. También podés usar «Subir audio»."
+        );
+      } else if (nombre === "NotFoundError" || nombre === "DevicesNotFoundError") {
+        setIaError("No se encontró un micrófono en este dispositivo. Usá «Subir audio».");
+      } else if (nombre === "NotReadableError" || nombre === "TrackStartError") {
+        setIaError("El micrófono está siendo usado por otra aplicación. Cerrala y probá de nuevo.");
+      } else if (nombre === "AbortError") {
+        setIaError("La grabación se interrumpió. Probá de nuevo.");
+      } else {
+        setIaError(
+          `No se pudo acceder al micrófono${nombre ? ` (${nombre})` : ""}. Podés usar «Subir audio» mientras tanto.`
+        );
       }
-    } catch {
-      // Si el navegador no soporta consultar permisos, seguimos igual.
+      return;
     }
 
+    setPidiendoPermiso(false);
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const preferidos = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg"];
       const mime = preferidos.find((m) => MediaRecorder.isTypeSupported?.(m)) || "";
       const rec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
@@ -290,22 +340,11 @@ export default function PartesDiariosPage() {
       setSegundos(0);
       timerRef.current = setInterval(() => setSegundos((s) => s + 1), 1000);
     } catch (err) {
-      const nombre = String(err?.name || "");
-      if (nombre === "NotAllowedError" || nombre === "PermissionDeniedError" || nombre === "SecurityError") {
-        setIaError(
-          "El navegador bloqueó el micrófono. Tocá el candado (o los tres puntos) al lado de la dirección → Permisos → Micrófono → Permitir, recargá la página y volvé a intentar. También podés usar «Subir audio»."
-        );
-      } else if (nombre === "NotFoundError" || nombre === "DevicesNotFoundError") {
-        setIaError("No se encontró un micrófono en este dispositivo. Usá «Subir audio».");
-      } else if (nombre === "NotReadableError" || nombre === "TrackStartError") {
-        setIaError("El micrófono está siendo usado por otra aplicación. Cerrala y probá de nuevo.");
-      } else if (nombre === "AbortError") {
-        setIaError("La grabación se interrumpió. Probá de nuevo.");
-      } else {
-        setIaError(
-          `No se pudo acceder al micrófono${nombre ? ` (${nombre})` : ""}. Podés usar «Subir audio» mientras tanto.`
-        );
-      }
+      console.error("Error al iniciar la grabación:", err);
+      if (stream) stream.getTracks().forEach((t) => t.stop());
+      setIaError(
+        `No se pudo iniciar la grabación${err?.message ? ` (${err.message})` : ""}. Podés usar «Subir audio» mientras tanto.`
+      );
     }
   }
 
@@ -421,6 +460,7 @@ export default function PartesDiariosPage() {
 
   function cerrarFormulario() {
     detenerGrabacion(true);
+    setPidiendoPermiso(false);
     limpiarAudio();
     setShowForm(false);
   }
@@ -948,7 +988,11 @@ export default function PartesDiariosPage() {
                       <Sparkles size={13} color="#F4791E" /> Dictar el parte
                     </span>
                     <div className="flex items-center gap-2">
-                      {!grabando ? (
+                      {pidiendoPermiso ? (
+                        <span className="flex items-center gap-1.5 border border-line bg-white px-3 py-1.5 rounded-sm text-sm font-medium text-[#6B6558]">
+                          <Loader2 size={14} className="animate-spin" /> Pidiendo permiso...
+                        </span>
+                      ) : !grabando ? (
                         <button
                           type="button"
                           onClick={empezarGrabacion}
