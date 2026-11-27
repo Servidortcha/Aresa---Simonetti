@@ -203,13 +203,14 @@ export default function PartesDiariosPage() {
     setIaError(null);
   }
 
-  function detenerGrabacion(descartar = false) {
+  function detenerGrabacion(descartar) {
+    const tirar = descartar === true;
     clearInterval(timerRef.current);
     timerRef.current = null;
     setGrabando(false);
     const rec = mediaRef.current;
     if (rec && rec.state !== "inactive") {
-      if (descartar) {
+      if (tirar) {
         // Al cerrar el formulario no mandamos el audio a la IA.
         rec.onstop = () => {
           try {
@@ -1004,7 +1005,7 @@ export default function PartesDiariosPage() {
                       ) : (
                         <button
                           type="button"
-                          onClick={detenerGrabacion}
+                          onClick={() => detenerGrabacion()}
                           className="flex items-center gap-1.5 bg-[#C7522A] text-white px-3 py-1.5 rounded-sm text-sm font-medium hover:bg-red"
                         >
                           <Square size={12} /> Detener {String(Math.floor(segundos / 60)).padStart(2, "0")}:
