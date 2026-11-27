@@ -16,6 +16,7 @@ function requiredRoles(pathname) {
   if (/^\/organigrama(\/|$)/.test(pathname)) return ["admin", "subadmin"];
   if (/^\/grua(\/|$)/.test(pathname)) return ["admin", "grua", "subadmin"];
   if (/^\/partes-diarios(\/|$)/.test(pathname)) return ["admin", "encargado", "supervision", "subadmin"];
+  if (/^\/horas-quincenales(\/|$)/.test(pathname)) return ["admin", "encargado", "supervision", "subadmin"];
   if (/^\/stock(\/|$)/.test(pathname)) return ["admin", "taller_stock", "subadmin"];
   if (/^\/cajas-acopio(\/|$)/.test(pathname)) return ["admin", "encargado", "subadmin"];
   if (/^\/ropa(\/|$)/.test(pathname)) return ["admin", "subadmin"];
