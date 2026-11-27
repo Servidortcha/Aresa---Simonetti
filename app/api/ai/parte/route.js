@@ -12,29 +12,77 @@ const MAX_BYTES = 4 * 1024 * 1024;
 const MIME_PERMITIDOS = [
   "audio/webm",
   "audio/ogg",
+  "application/ogg",
   "audio/mp4",
-  "audio/mpeg",
-  "audio/wav",
-  "audio/x-wav",
   "audio/x-m4a",
   "audio/m4a",
+  "audio/mpeg",
+  "audio/mp3",
+  "audio/x-mpeg",
+  "audio/wav",
+  "audio/x-wav",
+  "audio/wave",
+  "audio/vnd.wave",
   "audio/aac",
+  "audio/aacp",
   "audio/flac",
   "audio/x-flac",
+  "audio/3gpp",
+  "audio/3gpp2",
+  "audio/amr",
+  "audio/opus",
+  "audio/x-caf",
+  "audio/aiff",
+  "audio/x-aiff",
   "video/webm",
+  "video/mp4",
+  "video/3gpp",
 ];
 
 const MIME_POR_EXTENSION = {
   webm: "audio/webm",
   ogg: "audio/ogg",
   oga: "audio/ogg",
+  opus: "audio/ogg",
   mp4: "audio/mp4",
   m4a: "audio/mp4",
   mp3: "audio/mpeg",
   wav: "audio/wav",
   aac: "audio/aac",
   flac: "audio/flac",
+  "3gp": "audio/3gpp",
+  "3gpp": "audio/3gpp",
+  amr: "audio/amr",
+  caf: "audio/x-caf",
+  aiff: "audio/aiff",
+  aif: "audio/aiff",
 };
+
+// Los grabadores de Android/iOS a veces mandan el archivo sin tipo MIME o con
+// "application/octet-stream". Para no rechazar un audio válido, miramos los
+// primeros bytes del archivo (magic numbers) y deducimos el formato real.
+function detectarMime(buffer) {
+  if (!buffer || buffer.length < 12) return "";
+  const ascii = (desde, hasta) => buffer.toString("latin1", desde, hasta);
+
+  if (ascii(0, 4) === "OggS") return "audio/ogg";
+  if (ascii(0, 4) === "RIFF" && ascii(8, 12) === "WAVE") return "audio/wav";
+  if (ascii(0, 4) === "fLaC") return "audio/flac";
+  if (ascii(0, 3) === "ID3") return "audio/mpeg";
+  if (ascii(0, 4) === "caff") return "audio/x-caf";
+  if (ascii(0, 4) === "FORM" && /AIFF|AIFC/.test(ascii(8, 12))) return "audio/aiff";
+  if (ascii(0, 5) === "#!AMR") return "audio/amr";
+  if (buffer[0] === 0x1a && buffer[1] === 0x45 && buffer[2] === 0xdf && buffer[3] === 0xa3) {
+    return "audio/webm";
+  }
+  if (ascii(4, 8) === "ftyp") {
+    const marca = ascii(8, 12);
+    if (/3gp/i.test(marca)) return "audio/3gpp";
+    return "audio/mp4";
+  }
+  if (buffer[0] === 0xff && (buffer[1] & 0xe0) === 0xe0) return "audio/mpeg";
+  return "";
+}
 
 const PROMPT_PARTE = `Sos un asistente de obra que redacta partes diarios en español de Argentina.
 Escuchá el audio y devolvé EXCLUSIVAMENTE un objeto JSON válido, sin texto adicional ni bloques de código, con esta forma:
@@ -63,13 +111,20 @@ function normalizarLista(valor) {
   return texto.slice(0, 4000);
 }
 
-function resolverMime(archivo) {
-  const tipo = String(archivo.type || "").toLowerCase();
+function resolverMime(archivo, buffer) {
+  const tipo = String(archivo.type || "").toLowerCase().split(";")[0].trim();
+
+  // Normalizamos los tipos "de video" que en realidad traen solo audio.
   if (tipo === "video/webm") return "audio/webm";
+  if (tipo === "video/mp4") return "audio/mp4";
+  if (tipo === "video/3gpp") return "audio/3gpp";
   if (MIME_PERMITIDOS.includes(tipo)) return tipo;
+
   const nombre = String(archivo.name || "").toLowerCase();
   const ext = nombre.includes(".") ? nombre.split(".").pop() : "";
-  return MIME_POR_EXTENSION[ext] || "";
+  if (MIME_POR_EXTENSION[ext]) return MIME_POR_EXTENSION[ext];
+
+  return detectarMime(buffer);
 }
 
 export async function GET() {
@@ -108,15 +163,19 @@ export async function POST(request) {
       );
     }
 
-    const mime = resolverMime(archivo);
+    const buffer = Buffer.from(await archivo.arrayBuffer());
+    const mime = resolverMime(archivo, buffer);
     if (!mime) {
+      console.warn("Audio no reconocido:", archivo.name, archivo.type, buffer.length);
       return NextResponse.json(
-        { error: "Formato de audio no soportado. Usá la grabación del navegador o un MP3, M4A, OGG o WAV." },
+        {
+          error:
+            "No se reconoció el formato del audio. Probá grabando con el botón «Grabar» o convertí el archivo a MP3, M4A, OGG o WAV.",
+        },
         { status: 415 }
       );
     }
 
-    const buffer = Buffer.from(await archivo.arrayBuffer());
     const base64 = buffer.toString("base64");
 
     const { datos, modelo } = await llamarGemini({
@@ -129,6 +188,7 @@ export async function POST(request) {
     return NextResponse.json({
       ok: true,
       modelo,
+      mime,
       datos: {
         tareas: normalizarLista(datos?.tareas),
         novedades: normalizarLista(datos?.novedades),

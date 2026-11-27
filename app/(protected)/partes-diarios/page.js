@@ -72,6 +72,7 @@ export default function PartesDiariosPage() {
   const [grabando, setGrabando] = useState(false);
   const [segundos, setSegundos] = useState(0);
   const [audioUrl, setAudioUrl] = useState(null);
+  const [audioInfo, setAudioInfo] = useState(null);
   const [iaLeyendo, setIaLeyendo] = useState(false);
   const [iaResultado, setIaResultado] = useState(null);
   const [iaError, setIaError] = useState(null);
@@ -79,6 +80,7 @@ export default function PartesDiariosPage() {
   const chunksRef = useRef([]);
   const timerRef = useRef(null);
   const audioUrlRef = useRef(null);
+  const ultimoAudioRef = useRef(null);
 
   useEffect(() => {
     if (rol && rol !== "admin" && rol !== "encargado" && rol !== "supervision" && rol !== "subadmin") router.replace("/ingreso-egreso");
@@ -193,7 +195,9 @@ export default function PartesDiariosPage() {
       URL.revokeObjectURL(audioUrlRef.current);
       audioUrlRef.current = null;
     }
+    ultimoAudioRef.current = null;
     setAudioUrl(null);
+    setAudioInfo(null);
     setIaResultado(null);
     setIaError(null);
   }
@@ -273,6 +277,10 @@ export default function PartesDiariosPage() {
         const url = URL.createObjectURL(blob);
         audioUrlRef.current = url;
         setAudioUrl(url);
+        setAudioInfo({
+          nombre: "Grabación del navegador",
+          peso: `${Math.max(1, Math.round(blob.size / 1024))} KB`,
+        });
         leerAudio(blob);
       };
 
@@ -301,17 +309,37 @@ export default function PartesDiariosPage() {
     }
   }
 
+  function extensionAudio(blob) {
+    const t = String(blob?.type || "").toLowerCase();
+    if (t.includes("mp4") || t.includes("m4a")) return "m4a";
+    if (t.includes("ogg")) return "ogg";
+    if (t.includes("mpeg") || t.includes("mp3")) return "mp3";
+    if (t.includes("wav")) return "wav";
+    if (t.includes("3gpp")) return "3gp";
+    if (t.includes("amr")) return "amr";
+    if (t.includes("aac")) return "aac";
+    if (t.includes("flac")) return "flac";
+    return "webm";
+  }
+
   async function leerAudio(blob) {
     setIaLeyendo(true);
     setIaError(null);
     setIaResultado(null);
+    ultimoAudioRef.current = blob;
+
+    // Si la función del servidor se cuelga, cortamos a los 100 s y avisamos,
+    // así el usuario nunca queda mirando un spinner eterno.
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 100000);
+
     try {
       const {
         data: { session: sesionActual },
       } = await supabase.auth.getSession();
-      if (!sesionActual?.access_token) throw new Error("Sesión no válida.");
+      if (!sesionActual?.access_token) throw new Error("Tu sesión venció. Volvé a iniciar sesión.");
 
-      const ext = blob.type.includes("mp4") ? "m4a" : blob.type.includes("ogg") ? "ogg" : "webm";
+      const ext = extensionAudio(blob);
       const fd = new FormData();
       fd.append("archivo", blob, `parte.${ext}`);
 
@@ -319,17 +347,41 @@ export default function PartesDiariosPage() {
         method: "POST",
         headers: { Authorization: `Bearer ${sesionActual.access_token}` },
         body: fd,
+        signal: controller.signal,
       });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(json.error || "No se pudo interpretar el audio.");
+
+      const textoResp = await res.text();
+      let json = {};
+      try {
+        json = textoResp ? JSON.parse(textoResp) : {};
+      } catch {
+        json = {};
+      }
+
+      if (!res.ok) {
+        if (res.status === 413) {
+          throw new Error("El audio es muy grande para el servidor. Grabá uno más corto (menos de 4 MB).");
+        }
+        throw new Error(json?.error || `El servidor no pudo procesar el audio (HTTP ${res.status}).`);
+      }
+
+      if (!json?.datos) throw new Error("La IA no devolvió datos. Probá de nuevo.");
 
       setIaResultado({
-        tareas: json.datos?.tareas || "",
-        novedades: json.datos?.novedades || "",
+        tareas: json.datos.tareas || "",
+        novedades: json.datos.novedades || "",
       });
     } catch (err) {
-      setIaError(err.message);
+      console.error("Error al leer el audio del parte:", err);
+      if (err?.name === "AbortError") {
+        setIaError("La lectura tardó demasiado. Probá con un audio más corto o de nuevo en unos segundos.");
+      } else if (err instanceof TypeError) {
+        setIaError("No se pudo conectar con el servidor. Revisá la conexión e intentá de nuevo.");
+      } else {
+        setIaError(err?.message || "No se pudo interpretar el audio.");
+      }
     } finally {
+      clearTimeout(timeout);
       setIaLeyendo(false);
     }
   }
@@ -339,10 +391,20 @@ export default function PartesDiariosPage() {
     e.target.value = "";
     if (!file) return;
     limpiarAudio();
-    if (file.size > 4 * 1024 * 1024) {
-      setIaError("El audio supera los 4 MB. Grabá uno más corto.");
+    if (!file.size) {
+      setIaError("El archivo está vacío o no se pudo leer. Probá con otro audio.");
       return;
     }
+    if (file.size > 4 * 1024 * 1024) {
+      setIaError(
+        `El audio pesa ${(file.size / (1024 * 1024)).toFixed(1)} MB y el límite es 4 MB. Grabá uno más corto.`
+      );
+      return;
+    }
+    setAudioInfo({
+      nombre: file.name || "audio",
+      peso: `${Math.max(1, Math.round(file.size / 1024))} KB`,
+    });
     const url = URL.createObjectURL(file);
     audioUrlRef.current = url;
     setAudioUrl(url);
@@ -907,7 +969,12 @@ export default function PartesDiariosPage() {
                       )}
                       <label className="flex items-center gap-1.5 border border-line bg-white px-3 py-1.5 rounded-sm text-sm font-medium text-ink hover:bg-[#F2EEE3] cursor-pointer">
                         <Paperclip size={14} /> Subir audio
-                        <input type="file" accept="audio/*" className="hidden" onChange={onAudioFile} />
+                        <input
+                          type="file"
+                          accept="audio/*,.m4a,.mp3,.ogg,.oga,.wav,.aac,.amr,.3gp,.opus,.flac,.webm"
+                          className="hidden"
+                          onChange={onAudioFile}
+                        />
                       </label>
                     </div>
                   </div>
@@ -923,8 +990,14 @@ export default function PartesDiariosPage() {
                     </p>
                   )}
 
+                  {audioInfo && (
+                    <p className="text-[11px] text-[#6B6558] mt-2">
+                      Audio: <span className="font-medium">{audioInfo.nombre}</span> ({audioInfo.peso})
+                    </p>
+                  )}
+
                   {audioUrl && (
-                    <div className="flex items-center gap-2 mt-2">
+                    <div className="flex items-center gap-2 mt-1.5">
                       <audio src={audioUrl} controls className="h-8 w-full max-w-[280px]" />
                       <button
                         type="button"
@@ -939,11 +1012,24 @@ export default function PartesDiariosPage() {
 
                   {iaLeyendo && (
                     <p className="flex items-center gap-1.5 text-xs text-[#2E6F9E] mt-2">
-                      <Loader2 size={13} className="animate-spin" /> Escuchando y redactando...
+                      <Loader2 size={13} className="animate-spin" /> Enviando el audio y redactando el parte...
                     </p>
                   )}
 
-                  {iaError && <p className="text-xs text-red mt-2">{iaError}</p>}
+                  {iaError && (
+                    <div className="mt-2">
+                      <p className="text-xs text-red">{iaError}</p>
+                      {ultimoAudioRef.current && !iaLeyendo && (
+                        <button
+                          type="button"
+                          onClick={() => leerAudio(ultimoAudioRef.current)}
+                          className="mt-1 text-xs font-medium text-[#2E6F9E] hover:underline"
+                        >
+                          Reintentar lectura
+                        </button>
+                      )}
+                    </div>
+                  )}
 
                   {iaResultado && (
                     <div className="mt-2 border border-[#B9CBA9] bg-[#EAF0E4] rounded-sm px-3 py-2.5">
